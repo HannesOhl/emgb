@@ -4,9 +4,6 @@
 #include <stdarg.h>
 #include <string.h>
 
-#define MAX_ROM_SIZE 8000000
-#define MAX_STACK_SIZE 8000
-
 static inline void die(const char* fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
