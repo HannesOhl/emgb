@@ -4,6 +4,10 @@
 #include <stdarg.h>
 #include <string.h>
 
+#define MAX_ROM_SIZE 8000000
+
+static char* pname;
+
 static inline void die(const char* fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
@@ -52,6 +56,23 @@ typedef struct {
 	uint16_t pc;
 } Registers;
 Registers reg;
+
+typedef enum {
+	FLAG_C = (1 << 4),
+	FLAG_H = (1 << 5),
+	FLAG_N = (1 << 6),
+	FLAG_Z = (1 << 7)
+} Flag;
+
+void flag_set(Flag f) {
+	reg.f |= (uint8_t) f;
+}
+void flag_clear(Flag f) {
+	reg.f &= (uint8_t) ~f;
+}
+void flag_cond(Flag f, bool cond) {
+	reg.f = cond ? (reg.f | (uint8_t) f) : (reg.f & (uint8_t) ~f);
+}
 
 typedef struct {
 	uint8_t* c_rom; 		// 0x0000 - 0x7FFF  32 kB
@@ -133,42 +154,82 @@ void cpu_state_print() {
 	printf("\n");
 }
 
-void fetch(Memory* mem) {
+uint32_t cpu_step(Memory* mem) {
 
 	uint8_t opcode = bus_read(mem, reg.pc++);
 
 	switch (opcode) {
 
-		case 0xCD: {
-			uint8_t lsb = bus_read(mem, reg.pc++);
-			uint8_t msb = bus_read(mem, reg.pc++);
-			uint16_t nn = u16(lsb, msb);
-			bus_write(mem, --reg.sp, msb_make(reg.pc));
-			bus_write(mem, --reg.sp, lsb_make(reg.pc));
-			reg.pc = nn;
-		} break;
+	// CALL nn
+	case 0xCD: {
+		uint8_t lsb = bus_read(mem, reg.pc++);
+		uint8_t msb = bus_read(mem, reg.pc++);
+		uint16_t nn = u16(lsb, msb);
+		bus_write(mem, --reg.sp, msb_make(reg.pc));
+		bus_write(mem, --reg.sp, lsb_make(reg.pc));
+		reg.pc = nn;
+		return 24;
+	} break;
 
-		case 0xF0: {
-			uint8_t n = bus_read(mem, reg.pc++);
-			//reg.a = bus_read(mem, 0xFF00 + n);
-			reg.a = bus_read(mem, u16(n, 0xFF));
-		} break;
+	// LDH A, (n)
+	case 0xF0: {
+		uint8_t n = bus_read(mem, reg.pc++);
+		reg.a = bus_read(mem, u16(n, 0xFF));
+		return 12;
+	} break;
 
-		case 0xE0: {
-			uint8_t n = bus_read(mem, reg.pc++);
-			bus_write(mem, u16(n, 0xFF), reg.a);
-		} break;
+	// LDH (n), A
+	case 0xE0: {
+		uint8_t n = bus_read(mem, reg.pc++);
+		bus_write(mem, u16(n, 0xFF), reg.a);
+		return 12;
+	} break;
 
+	// R
+	case 0xCB: {
+		opcode = bus_read(mem, reg.pc++);
+		switch (opcode) {
+		// TODO:
+		// CB opcodes are highly structured
+		// 	-> write dispatch function
+
+		// RES 0, A
+		case 0x87: {
+			reg.a &= (uint8_t) ~(1 << 0);
+			return 4;
+		} break;
 		default:
-			die("Instruction 0x%hhX not implemented.\n", opcode);
+			die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
+			return 0;
 			break;
+		}
+	} break;
+
+	// CP n
+	case 0xFE: {
+		uint8_t n = bus_read(mem, reg.pc++);
+		uint8_t r = reg.a - n;
+		bool c = reg.a < n;
+		bool hc = (reg.a & 0x0F) < (n & 0x0F);
+		flag_cond(FLAG_Z, !r);
+		flag_set(FLAG_N);
+		flag_cond(FLAG_H, hc);
+		flag_cond(FLAG_C, c);
+		return 12;
+	} break;
+
+	default:
+		die("Instruction 0x%hhX not implemented.\n", opcode);
+		return 0;
+		break;
 	}
 }
 
 int main(int argc, char** argv) {
 
+	pname = argv[0];
 	if (argc < 2) {
-		die("Usage: \n");
+		die("Usage: %s rom.gb\n", pname);
 	}
 
 	Memory mem = {0};
@@ -188,12 +249,12 @@ int main(int argc, char** argv) {
 	reg.pc = 0x0150;
 	reg.sp = 0xFFFE;
 
+
 	while (true) {
-		fetch(&mem);
+		uint32_t cycles = cpu_step(&mem);
 		stack_print(&mem);
 		cpu_state_print();
 	}
-
 
 	free(mem.c_rom);
 	fclose(rom);
