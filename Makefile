@@ -16,7 +16,7 @@ SFLAGS := -fsanitize=address -fno-omit-frame-pointer
 
 #LFLAGS :=
 
-SOURCE := src/main.c
+SOURCE := src/main.c src/cpu.c src/bus.c
 OBJECT := $(SOURCE:.c=.o)
 
 all: $(TARGET)
