@@ -23,6 +23,7 @@ typedef struct {
 void bus_init(Bus* bus, FILE* rom);
 
 uint8_t bus_read(Bus* bus, uint16_t addr);
+uint16_t bus_read_16(Bus* bus, uint16_t addr);
 void bus_write(Bus* bus, uint16_t addr, uint8_t val);
 
 #endif

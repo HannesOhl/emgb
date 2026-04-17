@@ -55,6 +55,16 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	switch (opcode) {
 
+	// LD rr, nn
+	case 0x01: { reg->bc = bus_read_16(bus, reg->pc); reg->pc += 2; return 12; } break;
+	case 0x11: { reg->de = bus_read_16(bus, reg->pc); reg->pc += 2; return 12; } break;
+	case 0x21: { reg->hl = bus_read_16(bus, reg->pc); reg->pc += 2; return 12; } break;
+	case 0x31: { reg->sp = bus_read_16(bus, reg->pc); reg->pc += 2; return 12; } break;
+	// LD (nn), SP
+
+	// LD r, r'
+
+
 	// CALL nn
 	case 0xCD: {
 		uint8_t lsb = bus_read(bus, reg->pc++);

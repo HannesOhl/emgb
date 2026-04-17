@@ -18,6 +18,7 @@ int main(int argc, char** argv) {
 
 	Bus bus = {0};
 	bus_init(&bus, rom);
+	fclose(rom);
 
 	Cpu cpu = {0};
 	cpu_init(&cpu);
@@ -30,7 +31,6 @@ int main(int argc, char** argv) {
 	}
 
 	free(bus.c_rom);
-	fclose(rom);
 	return 0;
 }
 

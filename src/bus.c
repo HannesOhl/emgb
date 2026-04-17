@@ -31,6 +31,14 @@ uint8_t bus_read(Bus* bus, uint16_t addr) {
 	return bus->hi_ram[addr - 0xFF80];
 }
 
+uint16_t bus_read_16(Bus* bus, uint16_t addr) {
+
+	uint8_t lsb = bus_read(bus, addr);
+	uint8_t msb = bus_read(bus, addr + 1);
+
+	return u16(lsb, msb);
+}
+
 void bus_write(Bus* bus, uint16_t addr, uint8_t val) {
 
 	if (addr < 0x8000) return;
