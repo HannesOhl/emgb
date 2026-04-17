@@ -41,6 +41,12 @@ void cpu_state_print(Cpu* cpu) {
 	printf("\n");
 }
 
+void cpu_init(Cpu* cpu) {
+
+	cpu->reg.pc = 0x0150;
+	cpu->reg.sp = 0xFFFE;
+}
+
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	Registers* reg = &cpu->reg;

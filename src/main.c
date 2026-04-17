@@ -2,8 +2,6 @@
 #include "../inc/bus.h"
 #include "../inc/util.h"
 
-#define MAX_ROM_SIZE 8000000
-
 static char* pname;
 
 int main(int argc, char** argv) {
@@ -13,23 +11,16 @@ int main(int argc, char** argv) {
 		die("Usage: %s rom.gb\n", pname);
 	}
 
-	Bus bus = {0};
-	bus.c_rom = calloc((size_t) MAX_ROM_SIZE, sizeof *bus.c_rom);
-	if (!bus.c_rom) {
-		die("Error allocating busory for ROM.\n");
-	}
-
 	FILE* rom = fopen(argv[1], "rb");
 	if (!rom) {
 		die("Error opening ROM.\n");
 	}
 
-	size_t ret = fread(bus.c_rom, 1, MAX_ROM_SIZE, rom);
-	(void) ret;
+	Bus bus = {0};
+	bus_init(&bus, rom);
 
 	Cpu cpu = {0};
-	cpu.reg.pc = 0x0150;
-	cpu.reg.sp = 0xFFFE;
+	cpu_init(&cpu);
 
 	while (true) {
 		uint32_t cycles = cpu_step(&cpu, &bus);

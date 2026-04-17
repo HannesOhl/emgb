@@ -2,8 +2,13 @@
 #define BUS_H
 
 #include <stdint.h>
+#include <stdio.h>
 
 typedef struct {
+
+	uint8_t b_rom[256];		// 0x0000 - 0x00FF 256 B
+	bool b_enabled;
+
 	uint8_t* c_rom; 		// 0x0000 - 0x7FFF  32 kB
 	uint8_t v_ram[8192]; 		// 0x8000 - 0x9FFF   8 kB
 	uint8_t c_ram[8192];		// 0xA000 - 0xBFFF   8 kB
@@ -14,6 +19,8 @@ typedef struct {
 	uint8_t io_ram[128];  		// 0xFF00 - 0xFF7F 128 B
 	uint8_t hi_ram[128];		// 0xFF80 - 0xFFFF 128 B
 } Bus;
+
+void bus_init(Bus* bus, FILE* rom);
 
 uint8_t bus_read(Bus* bus, uint16_t addr);
 void bus_write(Bus* bus, uint16_t addr, uint8_t val);
