@@ -56,14 +56,68 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	switch (opcode) {
 
 	// LD rr, nn
-	case 0x01: { reg->bc = bus_read_16(bus, reg->pc); reg->pc += 2; return 12; } break;
-	case 0x11: { reg->de = bus_read_16(bus, reg->pc); reg->pc += 2; return 12; } break;
-	case 0x21: { reg->hl = bus_read_16(bus, reg->pc); reg->pc += 2; return 12; } break;
-	case 0x31: { reg->sp = bus_read_16(bus, reg->pc); reg->pc += 2; return 12; } break;
+	case 0x01: reg->bc = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
+	case 0x11: reg->de = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
+	case 0x21: reg->hl = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
+	case 0x31: reg->sp = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	// LD (nn), SP
 
 	// LD r, r'
+	case 0x40: reg->b = reg->b; return 4;
+	case 0x41: reg->b = reg->c; return 4;
+	case 0x42: reg->b = reg->d; return 4;
+	case 0x43: reg->b = reg->e; return 4;
+	case 0x44: reg->b = reg->h; return 4;
+	case 0x45: reg->b = reg->l; return 4;
+	case 0x47: reg->b = reg->a; return 4;
 
+	case 0x48: reg->c = reg->b; return 4;
+	case 0x49: reg->c = reg->c; return 4;
+	case 0x4A: reg->c = reg->d; return 4;
+	case 0x4B: reg->c = reg->e; return 4;
+	case 0x4C: reg->c = reg->h; return 4;
+	case 0x4D: reg->c = reg->l; return 4;
+	case 0x4F: reg->c = reg->a; return 4;
+
+	case 0x50: reg->d = reg->b; return 4;
+	case 0x51: reg->d = reg->c; return 4;
+	case 0x52: reg->d = reg->d; return 4;
+	case 0x53: reg->d = reg->e; return 4;
+	case 0x54: reg->d = reg->h; return 4;
+	case 0x55: reg->d = reg->l; return 4;
+	case 0x57: reg->d = reg->a; return 4;
+
+	case 0x58: reg->e = reg->b; return 4;
+	case 0x59: reg->e = reg->c; return 4;
+	case 0x5A: reg->e = reg->d; return 4;
+	case 0x5B: reg->e = reg->e; return 4;
+	case 0x5C: reg->e = reg->h; return 4;
+	case 0x5D: reg->e = reg->l; return 4;
+	case 0x5F: reg->e = reg->a; return 4;
+
+	case 0x60: reg->h = reg->b; return 4;
+	case 0x61: reg->h = reg->c; return 4;
+	case 0x62: reg->h = reg->d; return 4;
+	case 0x63: reg->h = reg->e; return 4;
+	case 0x64: reg->h = reg->h; return 4;
+	case 0x65: reg->h = reg->l; return 4;
+	case 0x67: reg->h = reg->a; return 4;
+
+	case 0x68: reg->l = reg->b; return 4;
+	case 0x69: reg->l = reg->c; return 4;
+	case 0x6A: reg->l = reg->d; return 4;
+	case 0x6B: reg->l = reg->e; return 4;
+	case 0x6C: reg->l = reg->h; return 4;
+	case 0x6D: reg->l = reg->l; return 4;
+	case 0x6F: reg->l = reg->a; return 4;
+
+	case 0x78: reg->a = reg->b; return 4;
+	case 0x79: reg->a = reg->c; return 4;
+	case 0x7A: reg->a = reg->d; return 4;
+	case 0x7B: reg->a = reg->e; return 4;
+	case 0x7C: reg->a = reg->h; return 4;
+	case 0x7D: reg->a = reg->l; return 4;
+	case 0x7F: reg->a = reg->a; return 4;
 
 	// CALL nn
 	case 0xCD: {
@@ -74,21 +128,21 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		bus_write(bus, --reg->sp, lsb_make(reg->pc));
 		reg->pc = nn;
 		return 24;
-	} break;
+	}
 
 	// LDH A, (n)
 	case 0xF0: {
 		uint8_t n = bus_read(bus, reg->pc++);
 		reg->a = bus_read(bus, u16(n, 0xFF));
 		return 12;
-	} break;
+	}
 
 	// LDH (n), A
 	case 0xE0: {
 		uint8_t n = bus_read(bus, reg->pc++);
 		bus_write(bus, u16(n, 0xFF), reg->a);
 		return 12;
-	} break;
+	}
 
 	// R
 	case 0xCB: {
@@ -102,13 +156,12 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		case 0x87: {
 			reg->a &= (uint8_t) ~(1 << 0);
 			return 4;
-		} break;
+		}
 		default:
 			die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
 			return 0;
-			break;
 		}
-	} break;
+	}
 
 	// CP n
 	case 0xFE: {
@@ -121,12 +174,11 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		flag_cond(reg, FLAG_H, hc);
 		flag_cond(reg, FLAG_C, c);
 		return 12;
-	} break;
+	}
 
 	default:
 		die("Instruction 0x%hhX not implemented.\n", opcode);
 		return 0;
-		break;
 	}
 }
 
