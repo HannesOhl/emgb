@@ -34,22 +34,22 @@ void stack_print(Cpu* cpu, Bus* bus) {
 
 void cpu_state_print(Cpu* cpu) {
 
-	//Registers* reg = &cpu->reg;
+	Registers* reg = &cpu->reg;
 
 	printf("cpu state:\n");
 	printf("cycles = %lu\n", cpu->cycles);
-	/*
+
 	printf("A = %02X, F = %02X\n", reg->a, reg->f);
 	printf("B = %02X, C = %02X\n", reg->b, reg->c);
 	printf("D = %02X, E = %02X\n", reg->d, reg->e);
 	printf("H = %02X, L = %02X\n", reg->h, reg->l);
+	printf("SP = %04X\n", reg->sp);
 	printf("\n");
-	*/
 }
 
 void cpu_init(Cpu* cpu) {
 
-	cpu->reg.pc = 0x0150;
+	cpu->reg.pc = 0x0000;
 }
 
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
@@ -57,7 +57,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	Registers* reg = &cpu->reg;
 
 	uint8_t opcode = bus_read(bus, reg->pc++);
-
+	printf("executing opcode 0x%02X\n", opcode);
 	switch (opcode) {
 
 	// NOP 1/1

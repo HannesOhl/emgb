@@ -5,7 +5,7 @@
 
 #define MAX_ROM_SIZE 8000000
 
-void bus_init(Bus* bus, FILE* rom) {
+void bus_init(Bus* bus, FILE* rom_b, FILE* rom) {
 
 	bus->c_rom = calloc((size_t) MAX_ROM_SIZE, sizeof *bus->c_rom);
 	if (!bus->c_rom) {
@@ -13,7 +13,10 @@ void bus_init(Bus* bus, FILE* rom) {
 	}
 
 	size_t ret = fread(bus->c_rom, 1, MAX_ROM_SIZE, rom);
+	ret = fread(bus->b_rom, 1, 256, rom_b);
 	(void) ret;
+
+	bus->b_enabled = true;
 }
 
 uint8_t bus_read(Bus* bus, uint16_t addr) {
@@ -47,7 +50,7 @@ uint16_t bus_read_16(Bus* bus, uint16_t addr) {
 void bus_write(Bus* bus, uint16_t addr, uint8_t val) {
 
 	// disable boot rom
-	if (addr == 0xFF50 && val != 0) bus->b_enabled = false;
+	if (addr == 0xFF50 && val != 0) { bus->b_enabled = false; return; }
 
 	if (addr < 0x8000) return;
 

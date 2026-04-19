@@ -10,26 +10,26 @@ int main(int argc, char** argv) {
 	pname = argv[0];
 	if (argc < 2) die("Usage: %s rom.gb\n", pname);
 
-	FILE* rom_b = fopen("dmg_boot.bin", "rb");
+	FILE* rom_b = fopen("./dmg_boot.bin", "rb");
 	if (!rom_b) die("Error opening Boot ROM.\n");
 
 	FILE* rom = fopen(argv[1], "rb");
 	if (!rom) die("Error opening ROM.\n");
 
 	Bus bus = {0};
-	bus_init(&bus, rom);
+	bus_init(&bus, rom_b, rom);
 	fclose(rom);
+	fclose(rom_b);
 
 	Cpu cpu = {0};
 	cpu_init(&cpu);
 
 	while (true) {
 		printf("\nfetches = %zu\n", n_fetches);
+		cpu_state_print(&cpu);
 		uint32_t cycles = cpu_step(&cpu, &bus);
 		n_fetches++;
-		cpu.cycles += cycles / 4;
-		stack_print(&cpu, &bus);
-		cpu_state_print(&cpu);
+		//stack_print(&cpu, &bus);
 	}
 
 	free(bus.c_rom);

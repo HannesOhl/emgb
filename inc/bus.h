@@ -20,7 +20,7 @@ typedef struct {
 	uint8_t hi_ram[128];		// 0xFF80 - 0xFFFF 128 B
 } Bus;
 
-void bus_init(Bus* bus, FILE* rom);
+void bus_init(Bus* bus, FILE* b_rom, FILE* rom);
 
 uint8_t bus_read(Bus* bus, uint16_t addr);
 uint16_t bus_read_16(Bus* bus, uint16_t addr);
