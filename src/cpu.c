@@ -52,6 +52,33 @@ void cpu_init(Cpu* cpu) {
 	cpu->reg.pc = 0x0000;
 }
 
+uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
+	// TODO:
+	// CB opcodes are highly structured
+	// 	-> write dispatch function
+	// 0b xx xxx xxx
+	//     ^   ^   ^
+	//     |   |    - target register:
+	//     |   |	  0=b, 1=c, 2=d, 3=e, 4=h, 5=l, 6=(hl), 7=a
+	//     |    - 0b 00... operation selection
+	//     |      0b 01/10/11... bit index for BIT, RES, SET
+	//      - instruction group:
+	uint8_t r =  opcode       & 0b00000111;
+	uint8_t b = (opcode >> 3) & 0b00111000;
+	uint8_t g = (opcode >> 6) & 0b11000000;
+	switch (opcode) {
+
+	// RES 0, A
+	case 0x87: {
+		reg->a &= (uint8_t) ~(1 << 0);
+		return 4;
+	}
+	default:
+		die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
+		return 0;
+	}
+}
+
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	Registers* reg = &cpu->reg;
@@ -103,6 +130,15 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x11: reg->de = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	case 0x21: reg->hl = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	case 0x31: reg->sp = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
+
+	// LD (HL+), A
+	case 0x22: bus_write(bus, reg->hl++, reg->a); return 8;
+	// LD (HL-), A
+	case 0x32: bus_write(bus, reg->hl--, reg->a); return 8;
+	// LD A, (HL+)
+	case 0x2A: reg->a = bus_read(bus, reg->hl++); return 8;
+	// LD A, (HL-)
+	case 0x3A: reg->a = bus_read(bus, reg->hl--); return 8;
 
 	// LD r, r' 49/49
 	// b
@@ -162,6 +198,50 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x7D: reg->a = reg->l; return 4;
 	case 0x7F: reg->a = reg->a; return 4;
 
+	// XOR r
+	case 0xA8: {
+		uint8_t r = reg->a ^ reg->b;
+		flag_cond(reg, FLAG_Z, r == 0);
+		reg->f &= 0b10000000;
+		return 4;
+	}
+	case 0xA9: {
+		uint8_t r = reg->a ^ reg->c;
+		flag_cond(reg, FLAG_Z, r == 0);
+		reg->f &= 0b10000000;
+		return 4;
+	}
+	case 0xAA: {
+		uint8_t r = reg->a ^ reg->d;
+		flag_cond(reg, FLAG_Z, r == 0);
+		reg->f &= 0b10000000;
+		return 4;
+	}
+	case 0xAB: {
+		uint8_t r = reg->a ^ reg->e;
+		flag_cond(reg, FLAG_Z, r == 0);
+		reg->f &= 0b10000000;
+		return 4;
+	}
+	case 0xAC: {
+		uint8_t r = reg->a ^ reg->h;
+		flag_cond(reg, FLAG_Z, r == 0);
+		reg->f &= 0b10000000;
+		return 4;
+	}
+	case 0xAD: {
+		uint8_t r = reg->a ^ reg->l;
+		flag_cond(reg, FLAG_Z, r == 0);
+		reg->f &= 0b10000000;
+		return 4;
+	}
+	case 0xAF: {
+		uint8_t r = reg->a ^ reg->a;
+		flag_cond(reg, FLAG_Z, r == 0);
+		reg->f &= 0b10000000;
+		return 4;
+	}
+
 	// CALL nn
 	case 0xCD: {
 		uint8_t lsb = bus_read(bus, reg->pc++);
@@ -190,20 +270,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	// R
 	case 0xCB: {
 		opcode = bus_read(bus, reg->pc++);
-		switch (opcode) {
-		// TODO:
-		// CB opcodes are highly structured
-		// 	-> write dispatch function
-
-		// RES 0, A
-		case 0x87: {
-			reg->a &= (uint8_t) ~(1 << 0);
-			return 4;
-		}
-		default:
-			die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
-			return 0;
-		}
+		return cb_execute(bus, reg, opcode);
 	}
 
 	// CP n
