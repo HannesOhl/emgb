@@ -18,6 +18,11 @@ void bus_init(Bus* bus, FILE* rom) {
 
 uint8_t bus_read(Bus* bus, uint16_t addr) {
 
+	// read from boot rom
+	if (bus->b_enabled && addr < 0x0100) {
+			   return bus-> b_rom[addr];
+	}
+
 	if (addr < 0x8000) return bus-> c_rom[addr];
 
 	if (addr < 0xA000) return bus-> v_ram[addr - 0x8000];
@@ -40,6 +45,9 @@ uint16_t bus_read_16(Bus* bus, uint16_t addr) {
 }
 
 void bus_write(Bus* bus, uint16_t addr, uint8_t val) {
+
+	// disable boot rom
+	if (addr == 0xFF50 && val != 0) bus->b_enabled = false;
 
 	if (addr < 0x8000) return;
 

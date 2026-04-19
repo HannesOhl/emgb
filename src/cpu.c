@@ -11,6 +11,9 @@ void flag_clear(Registers* reg, Flag f) {
 void flag_cond(Registers* reg, Flag f, bool cond) {
 	reg->f = cond ? (reg->f | (uint8_t) f) : (reg->f & (uint8_t) ~f);
 }
+bool flag_check(Registers* reg, Flag f) {
+	return ( (reg->f & (uint8_t) f) != 0 );
+}
 
 void stack_print(Cpu* cpu, Bus* bus) {
 
@@ -31,20 +34,22 @@ void stack_print(Cpu* cpu, Bus* bus) {
 
 void cpu_state_print(Cpu* cpu) {
 
-	Registers* reg = &cpu->reg;
+	//Registers* reg = &cpu->reg;
 
 	printf("cpu state:\n");
+	printf("cycles = %lu\n", cpu->cycles);
+	/*
 	printf("A = %02X, F = %02X\n", reg->a, reg->f);
 	printf("B = %02X, C = %02X\n", reg->b, reg->c);
 	printf("D = %02X, E = %02X\n", reg->d, reg->e);
 	printf("H = %02X, L = %02X\n", reg->h, reg->l);
 	printf("\n");
+	*/
 }
 
 void cpu_init(Cpu* cpu) {
 
 	cpu->reg.pc = 0x0150;
-	cpu->reg.sp = 0xFFFE;
 }
 
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
@@ -55,14 +60,52 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	switch (opcode) {
 
-	// LD rr, nn
+	// NOP 1/1
+	case 0x00: return 4;
+
+	// JR cc, e 2/2
+	case 0x20: {
+		int8_t e = (int8_t) bus_read(bus, reg->pc++);
+		if (!flag_check(reg, FLAG_Z)) {
+			reg->pc = (uint16_t) (reg->pc + (int16_t) e);
+			return 12;
+		}
+		return 8;
+	}
+	case 0x30: {
+		int8_t e = (int8_t) bus_read(bus, reg->pc++);
+		if (!flag_check(reg, FLAG_C)) {
+			reg->pc = (uint16_t) (reg->pc + (int16_t) e);
+			return 12;
+		}
+		return 8;
+	}
+
+
+	// LD r, n 7/7
+	case 0x06: reg->b = bus_read(bus, reg->pc++); return 8;
+	case 0x16: reg->d = bus_read(bus, reg->pc++); return 8;
+	case 0x26: reg->h = bus_read(bus, reg->pc++); return 8;
+	case 0x0E: reg->c = bus_read(bus, reg->pc++); return 8;
+	case 0x1E: reg->e = bus_read(bus, reg->pc++); return 8;
+	case 0x2E: reg->l = bus_read(bus, reg->pc++); return 8;
+	case 0x3E: reg->a = bus_read(bus, reg->pc++); return 8;
+
+	// LD (HL), n 1/1
+	case 0x36: {
+		uint8_t n = bus_read(bus, reg->pc++);
+		bus_write(bus, reg->hl, n);
+		return 12;
+	}
+
+	// LD rr, nn 4/4
 	case 0x01: reg->bc = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	case 0x11: reg->de = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	case 0x21: reg->hl = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	case 0x31: reg->sp = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
-	// LD (nn), SP
 
-	// LD r, r'
+	// LD r, r' 49/49
+	// b
 	case 0x40: reg->b = reg->b; return 4;
 	case 0x41: reg->b = reg->c; return 4;
 	case 0x42: reg->b = reg->d; return 4;
@@ -70,7 +113,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x44: reg->b = reg->h; return 4;
 	case 0x45: reg->b = reg->l; return 4;
 	case 0x47: reg->b = reg->a; return 4;
-
+	// c
 	case 0x48: reg->c = reg->b; return 4;
 	case 0x49: reg->c = reg->c; return 4;
 	case 0x4A: reg->c = reg->d; return 4;
@@ -78,7 +121,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x4C: reg->c = reg->h; return 4;
 	case 0x4D: reg->c = reg->l; return 4;
 	case 0x4F: reg->c = reg->a; return 4;
-
+	// d
 	case 0x50: reg->d = reg->b; return 4;
 	case 0x51: reg->d = reg->c; return 4;
 	case 0x52: reg->d = reg->d; return 4;
@@ -86,7 +129,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x54: reg->d = reg->h; return 4;
 	case 0x55: reg->d = reg->l; return 4;
 	case 0x57: reg->d = reg->a; return 4;
-
+	// e
 	case 0x58: reg->e = reg->b; return 4;
 	case 0x59: reg->e = reg->c; return 4;
 	case 0x5A: reg->e = reg->d; return 4;
@@ -94,7 +137,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x5C: reg->e = reg->h; return 4;
 	case 0x5D: reg->e = reg->l; return 4;
 	case 0x5F: reg->e = reg->a; return 4;
-
+	// h
 	case 0x60: reg->h = reg->b; return 4;
 	case 0x61: reg->h = reg->c; return 4;
 	case 0x62: reg->h = reg->d; return 4;
@@ -102,7 +145,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x64: reg->h = reg->h; return 4;
 	case 0x65: reg->h = reg->l; return 4;
 	case 0x67: reg->h = reg->a; return 4;
-
+	// l
 	case 0x68: reg->l = reg->b; return 4;
 	case 0x69: reg->l = reg->c; return 4;
 	case 0x6A: reg->l = reg->d; return 4;
@@ -110,7 +153,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x6C: reg->l = reg->h; return 4;
 	case 0x6D: reg->l = reg->l; return 4;
 	case 0x6F: reg->l = reg->a; return 4;
-
+	// a
 	case 0x78: reg->a = reg->b; return 4;
 	case 0x79: reg->a = reg->c; return 4;
 	case 0x7A: reg->a = reg->d; return 4;
