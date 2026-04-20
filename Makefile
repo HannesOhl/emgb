@@ -14,9 +14,10 @@ CFLAGS += -Wno-format-truncation
 DFLAGS := -g -O0 -DDEBUG
 SFLAGS := -fsanitize=address -fno-omit-frame-pointer
 
-#LFLAGS :=
+LFLAGS := lib/libSDL2.a
+LFLAGS += -lm
 
-SOURCE := src/main.c src/cpu.c src/bus.c
+SOURCE := src/main.c src/backend_sdl.c src/cpu.c src/bus.c
 OBJECT := $(SOURCE:.c=.o)
 
 all: $(TARGET)

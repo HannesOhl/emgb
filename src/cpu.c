@@ -95,8 +95,8 @@ uint8_t rrc(Registers* reg, uint8_t r_val) {
 	die("rrc.\n");
 	(void) r_val; return 0; }
 uint8_t rl (Registers* reg, uint8_t r_val) {
-	uint8_t c_in   = flag_check(reg, FLAG_C) ? 1 : 0;
-	uint8_t c_out  = r_val >> 7 & 1;
+	uint8_t c_in   = flag_check(reg, FLAG_C);
+	uint8_t c_out  = r_val >> 7;
 	uint8_t result = (r_val << 1) | c_in;
 	flag_con(reg, FLAG_C, c_out);
 	flag_con(reg, FLAG_Z, result == 0);
@@ -186,6 +186,16 @@ uint8_t inc_r(Registers* reg, uint8_t r) {
 	return result;
 }
 
+uint8_t dec_r(Registers* reg, uint8_t r) {
+
+	uint8_t result = r - 1;
+	flag_con(reg, FLAG_H, (r & 0x0F) == 0x0F);
+	flag_con(reg, FLAG_Z, result == 0);
+	flag_set(reg, FLAG_N);
+
+	return result;
+}
+
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	Registers* reg = &cpu->reg;
@@ -197,6 +207,9 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	// NOP 1/1
 	case 0x00: return 4;
 
+	// INC rr
+	// TODO:
+
 	// INC r
 	case 0x04: reg->b = inc_r(reg, reg->b); return 4;
 	case 0x14: reg->d = inc_r(reg, reg->d); return 4;
@@ -205,6 +218,27 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x1C: reg->e = inc_r(reg, reg->e); return 4;
 	case 0x2C: reg->l = inc_r(reg, reg->l); return 4;
 	case 0x3C: reg->a = inc_r(reg, reg->a); return 4;
+
+	// DEC r
+	case 0x05: reg->b = dec_r(reg, reg->b); return 4;
+	case 0x15: reg->d = dec_r(reg, reg->d); return 4;
+	case 0x25: reg->h = dec_r(reg, reg->h); return 4;
+	case 0x0D: reg->c = dec_r(reg, reg->c); return 4;
+	case 0x1D: reg->e = dec_r(reg, reg->e); return 4;
+	case 0x2D: reg->l = dec_r(reg, reg->l); return 4;
+	case 0x3D: reg->a = dec_r(reg, reg->a); return 4;
+
+	// RLA
+	case 0x17: {
+		uint8_t c_in   = flag_check(reg, FLAG_C);
+		uint8_t c_out  = reg->a >> 7;
+		reg->a = (reg->a << 1) | c_in;
+		flag_con(reg, FLAG_C, c_out);
+		flag_clr(reg, FLAG_Z);
+		flag_clr(reg, FLAG_N);
+		flag_clr(reg, FLAG_H);
+		return 4;
+	}
 
 	// JR cc, e 2/2
 	case 0x20: {
@@ -368,6 +402,32 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
+	}
+
+	// POP rr
+	case 0xC1: {
+		uint8_t lsb = bus_read(bus, reg->sp++);
+		uint8_t msb = bus_read(bus, reg->sp++);
+		reg->bc = u16(lsb, msb);
+		return 12;
+	}
+	case 0xD1: {
+		uint8_t lsb = bus_read(bus, reg->sp++);
+		uint8_t msb = bus_read(bus, reg->sp++);
+		reg->de = u16(lsb, msb);
+		return 12;
+	}
+	case 0xE1: {
+		uint8_t lsb = bus_read(bus, reg->sp++);
+		uint8_t msb = bus_read(bus, reg->sp++);
+		reg->hl = u16(lsb, msb);
+		return 12;
+	}
+	case 0xF1: {
+		uint8_t lsb = bus_read(bus, reg->sp++);
+		uint8_t msb = bus_read(bus, reg->sp++);
+		reg->af = u16(lsb, msb);
+		return 12;
 	}
 
 	// PUSH rr

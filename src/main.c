@@ -1,3 +1,4 @@
+#include "../inc/backend_sdl.h"
 #include "../inc/cpu.h"
 #include "../inc/bus.h"
 #include "../inc/util.h"
@@ -24,6 +25,10 @@ int main(int argc, char** argv) {
 	Cpu cpu = {0};
 	cpu_init(&cpu);
 
+	SDLContext* ctx = calloc((size_t) 1, (size_t) sizeof *ctx);
+	context_sdl_init(ctx);
+	uint32_t* buffer = ctx->surface->pixels;
+
 	while (true) {
 		printf("\nfetches = %zu\n", n_fetches);
 		cpu_state_print(&cpu);
@@ -32,6 +37,9 @@ int main(int argc, char** argv) {
 		n_fetches++;
 		//stack_print(&cpu, &bus);
 	}
+
+	context_sdl_destroy(ctx);
+	SDL_Quit();
 
 	free(bus.c_rom);
 	return 0;
