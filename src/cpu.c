@@ -144,14 +144,26 @@ static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 	}
 
 	// RES
-	case 2: r_val &= (uint8_t) ~(1 << b); cb_register_set(bus, reg, r, r_val); return cycles;
+	case 2: r_val &= (uint8_t) ~(1 << b); cb_register_set(bus, reg, r, r_val);
+		return cycles;
 	// SET
-	case 3: r_val |= (uint8_t)  (1 << b); cb_register_set(bus, reg, r, r_val); return cycles;
+	case 3: r_val |= (uint8_t)  (1 << b); cb_register_set(bus, reg, r, r_val);
+		return cycles;
 
 	default:
 		die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
 		return 0;
 	}
+}
+
+uint8_t inc_r(uint8_t r) {
+
+	uint8_t result = r + 1;
+	flag_con(reg, FLAG_H, (r & 0x0F) == 0x0F);
+	flag_con(reg, FLAG_Z, result == 0);
+	flag_clr(reg, FLAG_N);
+
+	return result;
 }
 
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
@@ -166,62 +178,13 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x00: return 4;
 
 	// INC r
-	case 0x04: {
-		uint8_t r = reg->b + 1;
-		flag_con(reg, FLAG_H, (reg->b & 0x0F) == 0x0F);
-		flag_con(reg, FLAG_Z, r == 0);
-		flag_clr(reg, FLAG_N);
-		reg->b = r;
-		return 4;
-	}
-	case 0x14: {
-		uint8_t r = reg->d + 1;
-		flag_con(reg, FLAG_H, (reg->d & 0x0F) == 0x0F);
-		flag_con(reg, FLAG_Z, r == 0);
-		flag_clr(reg, FLAG_N);
-		reg->d = r;
-		return 4;
-	}
-	case 0x24: {
-		uint8_t r = reg->h + 1;
-		flag_con(reg, FLAG_H, (reg->h & 0x0F) == 0x0F);
-		flag_con(reg, FLAG_Z, r == 0);
-		flag_clr(reg, FLAG_N);
-		reg->h = r;
-		return 4;
-	}
-	case 0x0C: {
-		uint8_t r = reg->c + 1;
-		flag_con(reg, FLAG_H, (reg->c & 0x0F) == 0x0F);
-		flag_con(reg, FLAG_Z, r == 0);
-		flag_clr(reg, FLAG_N);
-		reg->c = r;
-		return 4;
-	}
-	case 0x1C: {
-		uint8_t r = reg->e + 1;
-		flag_con(reg, FLAG_H, (reg->e & 0x0F) == 0x0F);
-		flag_con(reg, FLAG_Z, r == 0);
-		flag_clr(reg, FLAG_N);
-		reg->e = r;
-		return 4;
-	}
-	case 0x2C: {
-		uint8_t r = reg->l + 1;
-		flag_con(reg, FLAG_H, (reg->l & 0x0F) == 0x0F);
-		flag_con(reg, FLAG_Z, r == 0);
-		flag_clr(reg, FLAG_N);
-		reg->l = r;
-		return 4;
-	}
-	case 0x3C: {
-		uint8_t r = reg->a + 1;
-		flag_con(reg, FLAG_H, (reg->a & 0x0F) == 0x0F);
-		flag_con(reg, FLAG_Z, r == 0);
-		flag_clr(reg, FLAG_N);
-		reg->a = r;
-		return 4;
-	}
+	case 0x04: reg->b = inc_r(reg->b); return 4;
+	case 0x14: reg->d = inc_r(reg->d); return 4;
+	case 0x24: reg->h = inc_r(reg->h); return 4;
+	case 0x0C: reg->c = inc_r(reg->c); return 4;
+	case 0x1C: reg->e = inc_r(reg->e); return 4;
+	case 0x2C: reg->l = inc_r(reg->l); return 4;
+	case 0x3C: reg->a = inc_r(reg->a); return 4;
 
 	// JR cc, e 2/2
 	case 0x20: {
