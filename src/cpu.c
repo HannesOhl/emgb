@@ -156,7 +156,7 @@ static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 	}
 }
 
-uint8_t inc_r(uint8_t r) {
+uint8_t inc_r(Registers* reg, uint8_t r) {
 
 	uint8_t result = r + 1;
 	flag_con(reg, FLAG_H, (r & 0x0F) == 0x0F);
@@ -178,13 +178,13 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x00: return 4;
 
 	// INC r
-	case 0x04: reg->b = inc_r(reg->b); return 4;
-	case 0x14: reg->d = inc_r(reg->d); return 4;
-	case 0x24: reg->h = inc_r(reg->h); return 4;
-	case 0x0C: reg->c = inc_r(reg->c); return 4;
-	case 0x1C: reg->e = inc_r(reg->e); return 4;
-	case 0x2C: reg->l = inc_r(reg->l); return 4;
-	case 0x3C: reg->a = inc_r(reg->a); return 4;
+	case 0x04: reg->b = inc_r(reg, reg->b); return 4;
+	case 0x14: reg->d = inc_r(reg, reg->d); return 4;
+	case 0x24: reg->h = inc_r(reg, reg->h); return 4;
+	case 0x0C: reg->c = inc_r(reg, reg->c); return 4;
+	case 0x1C: reg->e = inc_r(reg, reg->e); return 4;
+	case 0x2C: reg->l = inc_r(reg, reg->l); return 4;
+	case 0x3C: reg->a = inc_r(reg, reg->a); return 4;
 
 	// JR cc, e 2/2
 	case 0x20: {
