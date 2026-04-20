@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
 		printf("\nfetches = %zu\n", n_fetches);
 		cpu_state_print(&cpu);
 		uint32_t cycles = cpu_step(&cpu, &bus);
+		(void) cycles;
 		n_fetches++;
 		//stack_print(&cpu, &bus);
 	}

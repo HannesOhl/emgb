@@ -88,14 +88,37 @@ static void cb_register_set(Bus* bus, Registers* reg, uint8_t r, uint8_t val) {
 	}
 }
 
-uint8_t rlc(uint8_t r_val) { (void) r_val; return 0; }
-uint8_t rrc(uint8_t r_val) { (void) r_val; return 0; }
-uint8_t rl (uint8_t r_val) { (void) r_val; return 0; }
-uint8_t rr (uint8_t r_val) { (void) r_val; return 0; }
-uint8_t sla(uint8_t r_val) { (void) r_val; return 0; }
-uint8_t sra(uint8_t r_val) { (void) r_val; return 0; }
-uint8_t swp(uint8_t r_val) { (void) r_val; return 0; }
-uint8_t srl(uint8_t r_val) { (void) r_val; return 0; }
+uint8_t rlc(Registers* reg, uint8_t r_val) {
+	die("rlc.\n");
+	(void) r_val; return 0; }
+uint8_t rrc(Registers* reg, uint8_t r_val) {
+	die("rrc.\n");
+	(void) r_val; return 0; }
+uint8_t rl (Registers* reg, uint8_t r_val) {
+	uint8_t c_in   = flag_check(reg, FLAG_C) ? 1 : 0;
+	uint8_t c_out  = r_val >> 7 & 1;
+	uint8_t result = (r_val << 1) | c_in;
+	flag_con(reg, FLAG_C, c_out);
+	flag_con(reg, FLAG_Z, result == 0);
+	flag_clr(reg, FLAG_N);
+	flag_clr(reg, FLAG_H);
+	return result;
+}
+uint8_t rr (Registers* reg, uint8_t r_val) {
+	die("rr .\n");
+	(void) r_val; return 0; }
+uint8_t sla(Registers* reg, uint8_t r_val) {
+	die("sla.\n");
+	(void) r_val; return 0; }
+uint8_t sra(Registers* reg, uint8_t r_val) {
+	die("sra.\n");
+	(void) r_val; return 0; }
+uint8_t swp(Registers* reg, uint8_t r_val) {
+	die("swp.\n");
+	(void) r_val; return 0; }
+uint8_t srl(Registers* reg, uint8_t r_val) {
+	die("srl.\n");
+	(void) r_val; return 0; }
 
 // 0b xx xxx xxx
 //     ^   ^   ^
@@ -106,7 +129,7 @@ uint8_t srl(uint8_t r_val) { (void) r_val; return 0; }
 //      - instruction group: 0b00: rot/shift, 0b01: BIT, 0b10: RES, 0b11: SET
 static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 
-	uint8_t r =  opcode       & 0b00000111;
+	uint8_t r = (opcode & 0b00000111) >> 0;
 	uint8_t b = (opcode & 0b00111000) >> 3;
 	uint8_t g = (opcode & 0b11000000) >> 6;
 
@@ -118,18 +141,15 @@ static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 	// rotates and shifts
 	case 0: {
 
-		die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
-		return 0;
-
 		switch (b) {
-		case 0: r_val = rlc(r_val); cb_register_set(bus, reg, r, r_val); break;
-		case 1: r_val = rrc(r_val); cb_register_set(bus, reg, r, r_val); break;
-		case 2: r_val = rl (r_val); cb_register_set(bus, reg, r, r_val); break;
-		case 3: r_val = rr (r_val); cb_register_set(bus, reg, r, r_val); break;
-		case 4: r_val = sla(r_val); cb_register_set(bus, reg, r, r_val); break;
-		case 5: r_val = sra(r_val); cb_register_set(bus, reg, r, r_val); break;
-		case 6: r_val = swp(r_val); cb_register_set(bus, reg, r, r_val); break;
-		case 7: r_val = srl(r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 0: r_val = rlc(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 1: r_val = rrc(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 2: r_val = rl (reg, r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 3: r_val = rr (reg, r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 4: r_val = sla(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 5: r_val = sra(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 6: r_val = swp(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 7: r_val = srl(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
 		default: die("invalid branch in cb_execute, case 0!\n");
 		}
 		return cycles;
@@ -214,6 +234,10 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x2E: reg->l = bus_read(bus, reg->pc++); return 8;
 	case 0x3E: reg->a = bus_read(bus, reg->pc++); return 8;
 
+	// LD A, (BC)
+	case 0x0A: reg->a = bus_read(bus, reg->bc); return 8;
+	case 0x1A: reg->a = bus_read(bus, reg->de); return 8;
+
 	// LD (HL), n 1/1
 	case 0x36: {
 		uint8_t n = bus_read(bus, reg->pc++);
@@ -294,6 +318,14 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x7D: reg->a = reg->l; return 4;
 	case 0x7F: reg->a = reg->a; return 4;
 
+	case 0x70: bus_write(bus, reg->hl, reg->b); return 8;
+	case 0x71: bus_write(bus, reg->hl, reg->c); return 8;
+	case 0x72: bus_write(bus, reg->hl, reg->d); return 8;
+	case 0x73: bus_write(bus, reg->hl, reg->e); return 8;
+	case 0x74: bus_write(bus, reg->hl, reg->h); return 8;
+	case 0x75: bus_write(bus, reg->hl, reg->l); return 8;
+	case 0x77: bus_write(bus, reg->hl, reg->a); return 8;
+
 	// XOR r
 	case 0xA8: {
 		uint8_t r = reg->a ^ reg->b;
@@ -336,6 +368,28 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
+	}
+
+	// PUSH rr
+	case 0xC5: {
+		bus_write(bus, --reg->sp, msb_make(reg->bc));
+		bus_write(bus, --reg->sp, lsb_make(reg->bc));
+		return 16;
+	}
+	case 0xD5: {
+		bus_write(bus, --reg->sp, msb_make(reg->de));
+		bus_write(bus, --reg->sp, lsb_make(reg->de));
+		return 16;
+	}
+	case 0xE5: {
+		bus_write(bus, --reg->sp, msb_make(reg->hl));
+		bus_write(bus, --reg->sp, lsb_make(reg->hl));
+		return 16;
+	}
+	case 0xF5: {
+		bus_write(bus, --reg->sp, msb_make(reg->af));
+		bus_write(bus, --reg->sp, lsb_make(reg->af));
+		return 16;
 	}
 
 	// CALL nn
