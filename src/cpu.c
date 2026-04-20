@@ -165,6 +165,64 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	// NOP 1/1
 	case 0x00: return 4;
 
+	// INC r
+	case 0x04: {
+		uint8_t r = reg->b + 1;
+		flag_con(reg, FLAG_H, (reg->b & 0x0F) == 0x0F);
+		flag_con(reg, FLAG_Z, r == 0);
+		flag_clr(reg, FLAG_N);
+		reg->b = r;
+		return 4;
+	}
+	case 0x14: {
+		uint8_t r = reg->d + 1;
+		flag_con(reg, FLAG_H, (reg->d & 0x0F) == 0x0F);
+		flag_con(reg, FLAG_Z, r == 0);
+		flag_clr(reg, FLAG_N);
+		reg->d = r;
+		return 4;
+	}
+	case 0x24: {
+		uint8_t r = reg->h + 1;
+		flag_con(reg, FLAG_H, (reg->h & 0x0F) == 0x0F);
+		flag_con(reg, FLAG_Z, r == 0);
+		flag_clr(reg, FLAG_N);
+		reg->h = r;
+		return 4;
+	}
+	case 0x0C: {
+		uint8_t r = reg->c + 1;
+		flag_con(reg, FLAG_H, (reg->c & 0x0F) == 0x0F);
+		flag_con(reg, FLAG_Z, r == 0);
+		flag_clr(reg, FLAG_N);
+		reg->c = r;
+		return 4;
+	}
+	case 0x1C: {
+		uint8_t r = reg->e + 1;
+		flag_con(reg, FLAG_H, (reg->e & 0x0F) == 0x0F);
+		flag_con(reg, FLAG_Z, r == 0);
+		flag_clr(reg, FLAG_N);
+		reg->e = r;
+		return 4;
+	}
+	case 0x2C: {
+		uint8_t r = reg->l + 1;
+		flag_con(reg, FLAG_H, (reg->l & 0x0F) == 0x0F);
+		flag_con(reg, FLAG_Z, r == 0);
+		flag_clr(reg, FLAG_N);
+		reg->l = r;
+		return 4;
+	}
+	case 0x3C: {
+		uint8_t r = reg->a + 1;
+		flag_con(reg, FLAG_H, (reg->a & 0x0F) == 0x0F);
+		flag_con(reg, FLAG_Z, r == 0);
+		flag_clr(reg, FLAG_N);
+		reg->a = r;
+		return 4;
+	}
+
 	// JR cc, e 2/2
 	case 0x20: {
 		int8_t e = (int8_t) bus_read(bus, reg->pc++);
