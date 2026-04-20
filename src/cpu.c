@@ -2,16 +2,16 @@
 
 #include "../inc/util.h"
 
-void flag_set(Registers* reg, Flag f) {
+static void flag_set(Registers* reg, Flag f) {
 	reg->f |= (uint8_t) f;
 }
-void flag_clear(Registers* reg, Flag f) {
+static void flag_clr(Registers* reg, Flag f) {
 	reg->f &= (uint8_t) ~f;
 }
-void flag_cond(Registers* reg, Flag f, bool cond) {
+static void flag_con(Registers* reg, Flag f, bool cond) {
 	reg->f = cond ? (reg->f | (uint8_t) f) : (reg->f & (uint8_t) ~f);
 }
-bool flag_check(Registers* reg, Flag f) {
+static bool flag_check(Registers* reg, Flag f) {
 	return ( (reg->f & (uint8_t) f) != 0 );
 }
 
@@ -52,27 +52,102 @@ void cpu_init(Cpu* cpu) {
 	cpu->reg.pc = 0x0000;
 }
 
-uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
-	// TODO:
-	// CB opcodes are highly structured
-	// 	-> write dispatch function
-	// 0b xx xxx xxx
-	//     ^   ^   ^
-	//     |   |    - target register:
-	//     |   |	  0=b, 1=c, 2=d, 3=e, 4=h, 5=l, 6=(hl), 7=a
-	//     |    - 0b 00... operation selection
-	//     |      0b 01/10/11... bit index for BIT, RES, SET
-	//      - instruction group:
-	uint8_t r =  opcode       & 0b00000111;
-	uint8_t b = (opcode >> 3) & 0b00111000;
-	uint8_t g = (opcode >> 6) & 0b11000000;
-	switch (opcode) {
+static uint8_t cb_register_get(Bus* bus, Registers* reg, uint8_t r) {
 
-	// RES 0, A
-	case 0x87: {
-		reg->a &= (uint8_t) ~(1 << 0);
-		return 4;
+	switch (r) {
+
+	case 0: return reg->b;
+	case 1: return reg->c;
+	case 2: return reg->d;
+	case 3: return reg->e;
+	case 4: return reg->h;
+	case 5: return reg->l;
+	case 6: return bus_read(bus, reg->hl);
+	case 7: return reg->a;
+
+	default: die("invalid branch in r_get_execute\n!"); return 0;
+
 	}
+}
+
+static void cb_register_set(Bus* bus, Registers* reg, uint8_t r, uint8_t val) {
+
+	switch (r) {
+
+	case 0: reg->b = val; return;
+	case 1: reg->c = val; return;
+	case 2: reg->d = val; return;
+	case 3: reg->e = val; return;
+	case 4: reg->h = val; return;
+	case 5: reg->l = val; return;
+	case 6: bus_write(bus, reg->hl, val); return;
+	case 7: reg->a = val; return;
+
+	default: die("invalid branch in r_get_execute\n!"); break;
+
+	}
+}
+
+uint8_t rlc(uint8_t r_val) { (void) r_val; return 0; }
+uint8_t rrc(uint8_t r_val) { (void) r_val; return 0; }
+uint8_t rl (uint8_t r_val) { (void) r_val; return 0; }
+uint8_t rr (uint8_t r_val) { (void) r_val; return 0; }
+uint8_t sla(uint8_t r_val) { (void) r_val; return 0; }
+uint8_t sra(uint8_t r_val) { (void) r_val; return 0; }
+uint8_t swp(uint8_t r_val) { (void) r_val; return 0; }
+uint8_t srl(uint8_t r_val) { (void) r_val; return 0; }
+
+// 0b xx xxx xxx
+//     ^   ^   ^
+//     |   |    - target register:
+//     |   |	  0=b, 1=c, 2=d, 3=e, 4=h, 5=l, 6=(hl), 7=a
+//     |    - 0b 00... operation selection
+//     |      0b 01/10/11... bit index for BIT, RES, SET
+//      - instruction group: 0b00: rot/shift, 0b01: BIT, 0b10: RES, 0b11: SET
+static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
+
+	uint8_t r =  opcode       & 0b00000111;
+	uint8_t b = (opcode & 0b00111000) >> 3;
+	uint8_t g = (opcode & 0b11000000) >> 6;
+
+	uint32_t cycles = (r != 6) ? 8 : 16;
+	uint8_t r_val = cb_register_get(bus, reg, r);
+
+	switch (g) {
+
+	// rotates and shifts
+	case 0: {
+
+		die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
+		return 0;
+
+		switch (b) {
+		case 0: r_val = rlc(r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 1: r_val = rrc(r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 2: r_val = rl (r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 3: r_val = rr (r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 4: r_val = sla(r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 5: r_val = sra(r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 6: r_val = swp(r_val); cb_register_set(bus, reg, r, r_val); break;
+		case 7: r_val = srl(r_val); cb_register_set(bus, reg, r, r_val); break;
+		default: die("invalid branch in cb_execute, case 0!\n");
+		}
+		return cycles;
+	}
+
+	// BIT
+	case 1: {
+		flag_con(reg, FLAG_Z, !(r_val & 1 << b));
+		flag_clr(reg, FLAG_N);
+		flag_set(reg, FLAG_H);
+		return cycles;
+	}
+
+	// RES
+	case 2: r_val &= (uint8_t) ~(1 << b); cb_register_set(bus, reg, r, r_val); return cycles;
+	// SET
+	case 3: r_val |= (uint8_t)  (1 << b); cb_register_set(bus, reg, r, r_val); return cycles;
+
 	default:
 		die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
 		return 0;
@@ -201,43 +276,43 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	// XOR r
 	case 0xA8: {
 		uint8_t r = reg->a ^ reg->b;
-		flag_cond(reg, FLAG_Z, r == 0);
+		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
 	}
 	case 0xA9: {
 		uint8_t r = reg->a ^ reg->c;
-		flag_cond(reg, FLAG_Z, r == 0);
+		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
 	}
 	case 0xAA: {
 		uint8_t r = reg->a ^ reg->d;
-		flag_cond(reg, FLAG_Z, r == 0);
+		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
 	}
 	case 0xAB: {
 		uint8_t r = reg->a ^ reg->e;
-		flag_cond(reg, FLAG_Z, r == 0);
+		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
 	}
 	case 0xAC: {
 		uint8_t r = reg->a ^ reg->h;
-		flag_cond(reg, FLAG_Z, r == 0);
+		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
 	}
 	case 0xAD: {
 		uint8_t r = reg->a ^ reg->l;
-		flag_cond(reg, FLAG_Z, r == 0);
+		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
 	}
 	case 0xAF: {
 		uint8_t r = reg->a ^ reg->a;
-		flag_cond(reg, FLAG_Z, r == 0);
+		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
 		return 4;
 	}
@@ -273,21 +348,24 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return cb_execute(bus, reg, opcode);
 	}
 
+	// LDH (C), A
+	case 0xE2: bus_write(bus, u16(reg->c, 0xFF), reg->a); return 8;
+
 	// CP n
 	case 0xFE: {
 		uint8_t n = bus_read(bus, reg->pc++);
 		uint8_t r = reg->a - n;
 		bool c = reg->a < n;
 		bool hc = (reg->a & 0x0F) < (n & 0x0F);
-		flag_cond(reg, FLAG_Z, !r);
+		flag_con(reg, FLAG_Z, !r);
 		flag_set(reg, FLAG_N);
-		flag_cond(reg, FLAG_H, hc);
-		flag_cond(reg, FLAG_C, c);
+		flag_con(reg, FLAG_H, hc);
+		flag_con(reg, FLAG_C, c);
 		return 12;
 	}
 
 	default:
-		die("Instruction 0x%hhX not implemented.\n", opcode);
+		die("Instruction 0x%02X not implemented.\n", opcode);
 		return 0;
 	}
 }

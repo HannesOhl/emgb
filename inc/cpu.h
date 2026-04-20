@@ -54,10 +54,6 @@ typedef struct {
 	uint64_t cycles;
 } Cpu;
 
-void flag_set(Registers* reg, Flag f);
-void flag_clear(Registers* reg, Flag f);
-void flag_cond(Registers* reg, Flag f, bool cond);
-
 void stack_print(Cpu* cpu, Bus* bus);
 void cpu_state_print(Cpu* cpu);
 void cpu_init(Cpu* cpu);
