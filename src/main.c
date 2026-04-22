@@ -1,6 +1,7 @@
 #include "../inc/backend_sdl.h"
 #include "../inc/cpu.h"
 #include "../inc/bus.h"
+#include "../inc/ppu.h"
 #include "../inc/util.h"
 
 static char* pname;
@@ -25,15 +26,20 @@ int main(int argc, char** argv) {
 	Cpu cpu = {0};
 	cpu_init(&cpu);
 
+
 	SDLContext* ctx = calloc((size_t) 1, (size_t) sizeof *ctx);
 	context_sdl_init(ctx);
 	uint32_t* buffer = ctx->surface->pixels;
+	(void) buffer;
+
+	Ppu ppu = {0};
+	ppu_init(&ppu, &bus, buffer);
 
 	while (true) {
 		printf("\nfetches = %zu\n", n_fetches);
 		cpu_state_print(&cpu);
 		uint32_t cycles = cpu_step(&cpu, &bus);
-		(void) cycles;
+		ppu_step(&ppu, cycles);
 		n_fetches++;
 		//stack_print(&cpu, &bus);
 	}

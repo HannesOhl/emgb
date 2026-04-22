@@ -89,10 +89,10 @@ static void cb_register_set(Bus* bus, Registers* reg, uint8_t r, uint8_t val) {
 }
 
 uint8_t rlc(Registers* reg, uint8_t r_val) {
-	die("rlc.\n");
+	die("rlc.\n"); (void) reg;
 	(void) r_val; return 0; }
 uint8_t rrc(Registers* reg, uint8_t r_val) {
-	die("rrc.\n");
+	die("rrc.\n"); (void) reg;
 	(void) r_val; return 0; }
 uint8_t rl (Registers* reg, uint8_t r_val) {
 	uint8_t c_in   = flag_check(reg, FLAG_C);
@@ -105,19 +105,19 @@ uint8_t rl (Registers* reg, uint8_t r_val) {
 	return result;
 }
 uint8_t rr (Registers* reg, uint8_t r_val) {
-	die("rr .\n");
+	die("rr .\n"); (void) reg;
 	(void) r_val; return 0; }
 uint8_t sla(Registers* reg, uint8_t r_val) {
-	die("sla.\n");
+	die("sla.\n"); (void) reg;
 	(void) r_val; return 0; }
 uint8_t sra(Registers* reg, uint8_t r_val) {
-	die("sra.\n");
+	die("sra.\n"); (void) reg;
 	(void) r_val; return 0; }
 uint8_t swp(Registers* reg, uint8_t r_val) {
-	die("swp.\n");
+	die("swp.\n"); (void) reg;
 	(void) r_val; return 0; }
 uint8_t srl(Registers* reg, uint8_t r_val) {
-	die("srl.\n");
+	die("srl.\n"); (void) reg;
 	(void) r_val; return 0; }
 
 // 0b xx xxx xxx
@@ -176,7 +176,7 @@ static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 	}
 }
 
-uint8_t inc_r(Registers* reg, uint8_t r) {
+static uint8_t inc_r(Registers* reg, uint8_t r) {
 
 	uint8_t result = r + 1;
 	flag_con(reg, FLAG_H, (r & 0x0F) == 0x0F);
@@ -186,7 +186,7 @@ uint8_t inc_r(Registers* reg, uint8_t r) {
 	return result;
 }
 
-uint8_t dec_r(Registers* reg, uint8_t r) {
+static uint8_t dec_r(Registers* reg, uint8_t r) {
 
 	uint8_t result = r - 1;
 	flag_con(reg, FLAG_H, (r & 0x0F) == 0x0F);
@@ -194,6 +194,16 @@ uint8_t dec_r(Registers* reg, uint8_t r) {
 	flag_set(reg, FLAG_N);
 
 	return result;
+}
+
+static uint8_t sub_r(Registers* reg, uint8_t r) {
+
+	flag_con(reg, FLAG_H, (reg->a & 0xF) < (r & 0xF));
+	flag_con(reg, FLAG_C, reg->a < r);
+	r -= 1;
+	flag_con(reg, FLAG_Z, reg->a == 0);
+	flag_set(reg, FLAG_N);
+	return r;
 }
 
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
@@ -208,7 +218,10 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x00: return 4;
 
 	// INC rr
-	// TODO:
+	case 0x03: reg->bc += 1; return 8;
+	case 0x13: reg->de += 1; return 8;
+	case 0x23: reg->hl += 1; return 8;
+	case 0x33: reg->sp += 1; return 8;
 
 	// INC r
 	case 0x04: reg->b = inc_r(reg, reg->b); return 4;
@@ -240,11 +253,26 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 4;
 	}
 
-	// JR cc, e 2/2
+	// JR e
+	case 0x18 : {
+		int8_t e = (int8_t) bus_read(bus, reg->pc++);
+		reg->pc = (uint16_t) (reg->pc + (int32_t) e);
+		return 12;
+	}
+
+	// JR cc, e 4/
 	case 0x20: {
 		int8_t e = (int8_t) bus_read(bus, reg->pc++);
 		if (!flag_check(reg, FLAG_Z)) {
-			reg->pc = (uint16_t) (reg->pc + (int16_t) e);
+			reg->pc = (uint16_t) (reg->pc + (int32_t) e);
+			return 12;
+		}
+		return 8;
+	}
+	case 0x28: {
+		int8_t e = (int8_t) bus_read(bus, reg->pc++);
+		if (flag_check(reg, FLAG_Z)) {
+			reg->pc = (uint16_t) (reg->pc + (int32_t) e);
 			return 12;
 		}
 		return 8;
@@ -252,11 +280,20 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x30: {
 		int8_t e = (int8_t) bus_read(bus, reg->pc++);
 		if (!flag_check(reg, FLAG_C)) {
-			reg->pc = (uint16_t) (reg->pc + (int16_t) e);
+			reg->pc = (uint16_t) (reg->pc + (int32_t) e);
 			return 12;
 		}
 		return 8;
 	}
+	case 0x38: {
+		int8_t e = (int8_t) bus_read(bus, reg->pc++);
+		if (flag_check(reg, FLAG_C)) {
+			reg->pc = (uint16_t) (reg->pc + (int32_t) e);
+			return 12;
+		}
+		return 8;
+	}
+
 
 
 	// LD r, n 7/7
@@ -360,6 +397,15 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x75: bus_write(bus, reg->hl, reg->l); return 8;
 	case 0x77: bus_write(bus, reg->hl, reg->a); return 8;
 
+	// SUB r
+	case 0x90: reg->a = sub_r(reg, reg->b); return 4;
+	case 0x91: reg->a = sub_r(reg, reg->c); return 4;
+	case 0x92: reg->a = sub_r(reg, reg->d); return 4;
+	case 0x93: reg->a = sub_r(reg, reg->e); return 4;
+	case 0x94: reg->a = sub_r(reg, reg->h); return 4;
+	case 0x95: reg->a = sub_r(reg, reg->l); return 4;
+	case 0x97: reg->a = sub_r(reg, reg->a); return 4;
+
 	// XOR r
 	case 0xA8: {
 		uint8_t r = reg->a ^ reg->b;
@@ -452,6 +498,14 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 16;
 	}
 
+	// RET
+	case 0xC9: {
+		uint8_t lsb = bus_read(bus, reg->sp++);
+		uint8_t msb = bus_read(bus, reg->sp++);
+		reg->pc = u16(lsb, msb);
+		return 16;
+	}
+
 	// CALL nn
 	case 0xCD: {
 		uint8_t lsb = bus_read(bus, reg->pc++);
@@ -461,6 +515,15 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		bus_write(bus, --reg->sp, lsb_make(reg->pc));
 		reg->pc = nn;
 		return 24;
+	}
+
+	// LD (nn), A
+	case 0xEA: {
+		uint8_t lsb = bus_read(bus, reg->pc++);
+		uint8_t msb = bus_read(bus, reg->pc++);
+		uint16_t nn = u16(lsb, msb);
+		bus_write(bus, nn, reg->a);
+		return 16;
 	}
 
 	// LDH A, (n)
