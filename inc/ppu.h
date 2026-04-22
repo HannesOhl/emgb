@@ -2,6 +2,7 @@
 #define PPU_H
 
 #include "./bus.h"
+#include "./backend_sdl.h"
 
 #include <stdint.h>
 
@@ -18,7 +19,7 @@ typedef struct {
 } Ppu;
 
 void ppu_init(Ppu* ppu, Bus* bus, uint32_t* pixels);
-void ppu_step(Ppu* ppu, uint32_t cycels);
+void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycels);
 
 #endif
 

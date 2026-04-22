@@ -5,7 +5,6 @@
 #include "../inc/util.h"
 
 static char* pname;
-static size_t n_fetches = 0;
 
 int main(int argc, char** argv) {
 
@@ -35,6 +34,10 @@ int main(int argc, char** argv) {
 	Ppu ppu = {0};
 	ppu_init(&ppu, &bus, buffer);
 
+	const uint32_t CYCLES_PER_FRAME = 70224;   // DMG
+	uint32_t frame_cycles = 0;
+	uint32_t last_ms = SDL_GetTicks();
+
 	bool running = true;
 	while (running) {
 		while (SDL_PollEvent(&ctx->event) != 0) {
@@ -45,16 +48,20 @@ int main(int argc, char** argv) {
 			default: {} break;
 			}
 		}
-		//printf("\nfetches = %zu\n", n_fetches);
-		//cpu_state_print(&cpu);
-		//stack_print(&cpu, &bus);
 
 		uint32_t cycles = cpu_step(&cpu, &bus);
-		ppu_step(&ppu, cycles);
+		ppu_step(&ppu, ctx, cycles);
+		frame_cycles += cycles;
 
-		SDL_UpdateWindowSurface(ctx->window);
+		if (frame_cycles >= CYCLES_PER_FRAME) {
+			frame_cycles -= CYCLES_PER_FRAME;
+			uint32_t now_ms = SDL_GetTicks();
+			uint32_t elapsed = now_ms - last_ms;
+			if (elapsed < 16) SDL_Delay(16 - elapsed);
+			last_ms = SDL_GetTicks();
+		}
 
-		n_fetches++;
+
 	}
 
 	context_sdl_destroy(ctx);

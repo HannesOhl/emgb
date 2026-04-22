@@ -449,6 +449,15 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 4;
 	}
 
+	// CP (HL)
+	case 0xBE: {
+		flag_con(reg, FLAG_Z, reg->a == reg->hl);
+		flag_set(reg, FLAG_N);
+		flag_con(reg, FLAG_H, (reg->a & 0xF) < (reg->hl & 0xF));
+		flag_con(reg, FLAG_C, reg->a < reg->hl);
+		return 8;
+	}
+
 	// POP rr
 	case 0xC1: {
 		uint8_t lsb = bus_read(bus, reg->sp++);

@@ -5,20 +5,6 @@
 
 #define MAX_ROM_SIZE 8000000
 
-void bus_init(Bus* bus, FILE* rom_b, FILE* rom) {
-
-	bus->c_rom = calloc((size_t) MAX_ROM_SIZE, sizeof *bus->c_rom);
-	if (!bus->c_rom) {
-		die("Error allocating busory for ROM.\n");
-	}
-
-	size_t ret = fread(bus->c_rom, 1, MAX_ROM_SIZE, rom);
-	ret = fread(bus->b_rom, 1, 256, rom_b);
-	(void) ret;
-
-	bus->b_enabled = true;
-}
-
 uint8_t bus_read(Bus* bus, uint16_t addr) {
 
 	// read from boot rom
@@ -63,5 +49,26 @@ void bus_write(Bus* bus, uint16_t addr, uint8_t val) {
 	if (addr < 0xFF80) { bus->io_ram[addr - 0xFF00] = val;  return; }
 
 	bus->hi_ram[addr - 0xFF80] = val;
+}
+
+void bus_init(Bus* bus, FILE* rom_b, FILE* rom) {
+
+	bus->c_rom = calloc((size_t) MAX_ROM_SIZE, sizeof *bus->c_rom);
+	if (!bus->c_rom) {
+		die("Error allocating busory for ROM.\n");
+	}
+
+	size_t ret = fread(bus->c_rom, 1, MAX_ROM_SIZE, rom);
+	ret = fread(bus->b_rom, 1, 256, rom_b);
+	(void) ret;
+
+	bus->b_enabled = true;
+
+	bus_write(bus, 0xFF40, 0x91);
+	bus_write(bus, 0xFF42, 0x00);
+	bus_write(bus, 0xFF43, 0x00);
+	bus_write(bus, 0xFF47, 0xFC);
+	bus_write(bus, 0xFF48, 0xFF);
+	bus_write(bus, 0xFF49, 0xFF);
 }
 
