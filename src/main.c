@@ -35,13 +35,26 @@ int main(int argc, char** argv) {
 	Ppu ppu = {0};
 	ppu_init(&ppu, &bus, buffer);
 
-	while (true) {
-		printf("\nfetches = %zu\n", n_fetches);
-		cpu_state_print(&cpu);
+	bool running = true;
+	while (running) {
+		while (SDL_PollEvent(&ctx->event) != 0) {
+			switch (ctx->event.type) {
+			case SDL_KEYDOWN: {
+				if (ctx->event.key.keysym.sym == SDLK_ESCAPE) running = false;
+			} break;
+			default: {} break;
+			}
+		}
+		//printf("\nfetches = %zu\n", n_fetches);
+		//cpu_state_print(&cpu);
+		//stack_print(&cpu, &bus);
+
 		uint32_t cycles = cpu_step(&cpu, &bus);
 		ppu_step(&ppu, cycles);
+
+		SDL_UpdateWindowSurface(ctx->window);
+
 		n_fetches++;
-		//stack_print(&cpu, &bus);
 	}
 
 	context_sdl_destroy(ctx);

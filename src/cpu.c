@@ -211,7 +211,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	Registers* reg = &cpu->reg;
 
 	uint8_t opcode = bus_read(bus, reg->pc++);
-	printf("executing opcode 0x%02X\n", opcode);
 	switch (opcode) {
 
 	// NOP 1/1
