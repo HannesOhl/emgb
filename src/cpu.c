@@ -189,7 +189,7 @@ static uint8_t inc_r(Registers* reg, uint8_t r) {
 static uint8_t dec_r(Registers* reg, uint8_t r) {
 
 	uint8_t result = r - 1;
-	flag_con(reg, FLAG_H, (r & 0x0F) == 0x0F);
+	flag_con(reg, FLAG_H, (r & 0x0F) == 0x00);
 	flag_con(reg, FLAG_Z, result == 0);
 	flag_set(reg, FLAG_N);
 
@@ -197,13 +197,13 @@ static uint8_t dec_r(Registers* reg, uint8_t r) {
 }
 
 static uint8_t sub_r(Registers* reg, uint8_t r) {
-
-	flag_con(reg, FLAG_H, (reg->a & 0xF) < (r & 0xF));
-	flag_con(reg, FLAG_C, reg->a < r);
-	r -= 1;
-	flag_con(reg, FLAG_Z, reg->a == 0);
+	uint8_t a = reg->a;
+	uint8_t res = a - r;
+	flag_con(reg, FLAG_H, (a & 0x0F) < (r & 0x0F));
+	flag_con(reg, FLAG_C, a < r);
+	flag_con(reg, FLAG_Z, res == 0);
 	flag_set(reg, FLAG_N);
-	return r;
+	return res;
 }
 
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
@@ -396,6 +396,18 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x75: bus_write(bus, reg->hl, reg->l); return 8;
 	case 0x77: bus_write(bus, reg->hl, reg->a); return 8;
 
+	// ADD (HL)
+	case 0x86: {
+		uint8_t data = bus_read(bus, reg->hl);
+		uint8_t res = reg->a + data;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_clr(reg, FLAG_N);
+		flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (data & 0x0F)) > 0x0F);
+		flag_con(reg, FLAG_C, res < reg->a);
+		reg->a = res;
+		return 8;
+	}
+
 	// SUB r
 	case 0x90: reg->a = sub_r(reg, reg->b); return 4;
 	case 0x91: reg->a = sub_r(reg, reg->c); return 4;
@@ -410,51 +422,59 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		uint8_t r = reg->a ^ reg->b;
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
+		reg->a = r;
 		return 4;
 	}
 	case 0xA9: {
 		uint8_t r = reg->a ^ reg->c;
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
+		reg->a = r;
 		return 4;
 	}
 	case 0xAA: {
 		uint8_t r = reg->a ^ reg->d;
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
+		reg->a = r;
 		return 4;
 	}
 	case 0xAB: {
 		uint8_t r = reg->a ^ reg->e;
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
+		reg->a = r;
 		return 4;
 	}
 	case 0xAC: {
 		uint8_t r = reg->a ^ reg->h;
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
+		reg->a = r;
 		return 4;
 	}
 	case 0xAD: {
 		uint8_t r = reg->a ^ reg->l;
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
+		reg->a = r;
 		return 4;
 	}
 	case 0xAF: {
 		uint8_t r = reg->a ^ reg->a;
 		flag_con(reg, FLAG_Z, r == 0);
 		reg->f &= 0b10000000;
+		reg->a = r;
 		return 4;
 	}
 
 	// CP (HL)
 	case 0xBE: {
-		flag_con(reg, FLAG_Z, reg->a == reg->hl);
+		uint8_t r = bus_read(bus, reg->hl);
+		flag_con(reg, FLAG_Z, reg->a == r);
 		flag_set(reg, FLAG_N);
-		flag_con(reg, FLAG_H, (reg->a & 0xF) < (reg->hl & 0xF));
-		flag_con(reg, FLAG_C, reg->a < reg->hl);
+		flag_con(reg, FLAG_H, (reg->a & 0xF) < (r & 0xF));
+		flag_con(reg, FLAG_C, reg->a < r);
 		return 8;
 	}
 

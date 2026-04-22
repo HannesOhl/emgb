@@ -26,7 +26,6 @@ static uint32_t palette_color(uint8_t shade) {
 static uint8_t bg_pixel(Ppu* ppu, uint32_t x, uint32_t y) {
 
 	uint8_t scx  = bus_read(ppu->bus, 0xFF43);
-	printf("scx = %u\n", scx);
 	uint8_t scy  = bus_read(ppu->bus, 0xFF42);
 	uint8_t lcdc = bus_read(ppu->bus, 0xFF40);
 
