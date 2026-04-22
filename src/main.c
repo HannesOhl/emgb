@@ -34,13 +34,9 @@ int main(int argc, char** argv) {
 	Ppu ppu = {0};
 	ppu_init(&ppu, &bus, buffer);
 
-	const uint32_t CYCLES_PER_FRAME = 70224;   // DMG
-	uint32_t frame_cycles = 0;
-	uint32_t last_ms = SDL_GetTicks();
-
 	bool running = true;
 	while (running) {
-		if (!bus.b_enabled) die("turned of dmg rom.\n");
+	//	if (!bus.b_enabled) die("turned of dmg rom.\n");
 		while (SDL_PollEvent(&ctx->event) != 0) {
 			switch (ctx->event.type) {
 			case SDL_KEYDOWN: {
@@ -52,23 +48,12 @@ int main(int argc, char** argv) {
 
 		uint32_t cycles = cpu_step(&cpu, &bus);
 		ppu_step(&ppu, ctx, cycles);
-		frame_cycles += cycles;
-
-		if (frame_cycles >= CYCLES_PER_FRAME) {
-			frame_cycles -= CYCLES_PER_FRAME;
-			uint32_t now_ms = SDL_GetTicks();
-			uint32_t elapsed = now_ms - last_ms;
-			if (elapsed < 16) SDL_Delay(16 - elapsed);
-			last_ms = SDL_GetTicks();
-		}
-
-
 	}
 
 	context_sdl_destroy(ctx);
 	SDL_Quit();
-
 	free(bus.c_rom);
+
 	return 0;
 }
 

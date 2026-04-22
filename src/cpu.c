@@ -1,3 +1,5 @@
+// TODO: use _Generic to treat opcodes for (HL) different!
+
 #include "../inc/cpu.h"
 
 #include "../inc/util.h"
@@ -196,6 +198,20 @@ static uint8_t dec_r(Registers* reg, uint8_t r) {
 	return result;
 }
 
+static uint16_t dec_rr(uint16_t r) {
+	return r - 1;
+}
+
+static uint8_t or_r(Registers* reg, uint8_t r) {
+	uint8_t res = reg->a | r;
+	flag_con(reg, FLAG_Z, res == 0);
+	flag_clr(reg, FLAG_N);
+	flag_clr(reg, FLAG_H);
+	flag_clr(reg, FLAG_C);
+
+	return res;
+}
+
 static uint8_t sub_r(Registers* reg, uint8_t r) {
 	uint8_t a = reg->a;
 	uint8_t res = a - r;
@@ -215,6 +231,43 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	// NOP 1/1
 	case 0x00: return 4;
+
+	// (post boot rom) ADD HL, rr
+	case 0x09: {
+		uint16_t res = reg->hl + reg->bc;
+		reg->hl = res;
+		flag_clr(reg, FLAG_N);
+		flag_con(reg, FLAG_H, ((reg->hl + 0x0FFF) + (reg->bc & 0x0FFFF)) > 0x0FFF);
+		flag_con(reg, FLAG_C, (reg->hl + reg->bc) > 0xFFFF);
+		return 8;
+	}
+	case 0x19: {
+		uint16_t res = reg->hl + reg->de;
+		reg->hl = res;
+		flag_clr(reg, FLAG_N);
+		flag_con(reg, FLAG_H, ((reg->hl + 0x0FFF) + (reg->de & 0x0FFFF)) > 0x0FFF);
+		flag_con(reg, FLAG_C, (reg->hl + reg->de) > 0xFFFF);
+		return 8;
+	}
+	case 0x29: {
+		uint16_t res = reg->hl + reg->hl;
+		reg->hl = res;
+		flag_clr(reg, FLAG_N);
+		flag_con(reg, FLAG_H, ((reg->hl + 0x0FFF) + (reg->hl & 0x0FFFF)) > 0x0FFF);
+		flag_con(reg, FLAG_C, (reg->hl + reg->hl) > 0xFFFF);
+		return 8;
+	}
+	case 0x39: {
+		uint16_t res = reg->hl + reg->sp;
+		reg->hl = res;
+		flag_clr(reg, FLAG_N);
+		flag_con(reg, FLAG_H, ((reg->hl + 0x0FFF) + (reg->sp & 0x0FFFF)) > 0x0FFF);
+		flag_con(reg, FLAG_C, (reg->hl + reg->sp) > 0xFFFF);
+		return 8;
+	}
+
+	// (post boot rom) LD (DE), A
+	case 0x12: bus_write(bus, reg->de, reg->a); return 8;
 
 	// INC rr
 	case 0x03: reg->bc += 1; return 8;
@@ -239,6 +292,12 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x1D: reg->e = dec_r(reg, reg->e); return 4;
 	case 0x2D: reg->l = dec_r(reg, reg->l); return 4;
 	case 0x3D: reg->a = dec_r(reg, reg->a); return 4;
+
+	// (post boot rom) DEC rr
+	case 0x0B: reg->bc = dec_rr(reg->bc); return 8;
+	case 0x1B: reg->de = dec_rr(reg->de); return 8;
+	case 0x2B: reg->hl = dec_rr(reg->hl); return 8;
+	case 0x3B: reg->sp = dec_rr(reg->sp); return 8;
 
 	// RLA
 	case 0x17: {
@@ -468,6 +527,72 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 4;
 	}
 
+	// (post boot rom) OR r
+	case 0xB0: reg->a = or_r(reg, reg->b); return 4;
+	case 0xB1: reg->a = or_r(reg, reg->c); return 4;
+	case 0xB2: reg->a = or_r(reg, reg->d); return 4;
+	case 0xB3: reg->a = or_r(reg, reg->e); return 4;
+	case 0xB4: reg->a = or_r(reg, reg->h); return 4;
+	case 0xB5: reg->a = or_r(reg, reg->l); return 4;
+	case 0xB7: reg->a = or_r(reg, reg->a); return 4;
+
+	// (post boot rom) CP r
+	case 0xB8: {
+		uint8_t res = reg->a - reg->b;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_set(reg, FLAG_N);
+		flag_con(reg, FLAG_H, (reg->a & 0x0F) < (reg->b & 0x0F));
+		flag_con(reg, FLAG_C, reg->a < reg->b);
+		return 4;
+	}
+	case 0xB9: {
+		uint8_t res = reg->a - reg->c;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_set(reg, FLAG_N);
+		flag_con(reg, FLAG_H, (reg->a & 0x0F) < (reg->c & 0x0F));
+		flag_con(reg, FLAG_C, reg->a < reg->c);
+		return 4;
+	}
+	case 0xBA: {
+		uint8_t res = reg->a - reg->d;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_set(reg, FLAG_N);
+		flag_con(reg, FLAG_H, (reg->a & 0x0F) < (reg->d & 0x0F));
+		flag_con(reg, FLAG_C, reg->a < reg->d);
+		return 4;
+	}
+	case 0xBB: {
+		uint8_t res = reg->a - reg->e;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_set(reg, FLAG_N);
+		flag_con(reg, FLAG_H, (reg->a & 0x0F) < (reg->e & 0x0F));
+		flag_con(reg, FLAG_C, reg->a < reg->e);
+		return 4;
+	}
+	case 0xBC: {
+		uint8_t res = reg->a - reg->h;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_set(reg, FLAG_N);
+		flag_con(reg, FLAG_H, (reg->a & 0x0F) < (reg->h & 0x0F));
+		flag_con(reg, FLAG_C, reg->a < reg->h);
+		return 4;
+	}
+	case 0xBD: {
+		uint8_t res = reg->a - reg->l;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_set(reg, FLAG_N);
+		flag_con(reg, FLAG_H, (reg->a & 0x0F) < (reg->l & 0x0F));
+		flag_con(reg, FLAG_C, reg->a < reg->l);
+		return 4;
+	}
+	case 0xBF: {
+		flag_set(reg, FLAG_Z);
+		flag_set(reg, FLAG_N);
+		flag_clr(reg, FLAG_H);
+		flag_clr(reg, FLAG_C);
+		return 4;
+	}
+
 	// CP (HL)
 	case 0xBE: {
 		uint8_t r = bus_read(bus, reg->hl);
@@ -504,6 +629,14 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 12;
 	}
 
+ 	// (post boot rom) JP nn
+	case 0xC3: {
+		uint8_t lsb = bus_read(bus, reg->pc++);
+		uint8_t msb = bus_read(bus, reg->pc++);
+		reg->pc = u16(lsb, msb);
+		return 16;
+	} break;
+
 	// PUSH rr
 	case 0xC5: {
 		bus_write(bus, --reg->sp, msb_make(reg->bc));
@@ -526,6 +659,18 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 16;
 	}
 
+	// (post boot rom) AND n
+	case 0xE6: {
+		uint8_t n = bus_read(bus, reg->pc++);
+		uint8_t res = reg->a & n;
+		reg->a = res;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_clr(reg, FLAG_N);
+		flag_set(reg, FLAG_H);
+		flag_clr(reg, FLAG_C);
+		return 8;
+	}
+
 	// RET
 	case 0xC9: {
 		uint8_t lsb = bus_read(bus, reg->sp++);
@@ -533,6 +678,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		reg->pc = u16(lsb, msb);
 		return 16;
 	}
+
 
 	// CALL nn
 	case 0xCD: {
@@ -568,7 +714,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 12;
 	}
 
-	// R
 	case 0xCB: {
 		opcode = bus_read(bus, reg->pc++);
 		return cb_execute(bus, reg, opcode);
@@ -576,6 +721,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	// LDH (C), A
 	case 0xE2: bus_write(bus, u16(reg->c, 0xFF), reg->a); return 8;
+
 
 	// CP n
 	case 0xFE: {
