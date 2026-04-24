@@ -48,8 +48,8 @@ typedef enum {
 typedef struct {
 	Registers reg;
 
-	bool halt;
-	bool stop;
+	bool halted;
+	bool stopped;
 
 	uint64_t cycles;
 } Cpu;

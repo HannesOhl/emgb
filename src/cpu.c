@@ -274,8 +274,13 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	}
 
 	// (post boot rom) STOP
-	// TODO:
-	case 0x10:
+	// TODO: handle this correctly
+	case 0x10: {
+		uint8_t consume = bus_read(bus, reg->pc++);
+		(void) consume;
+		//cpu->stopped = true;
+		return 4;
+	}
 
 	// (post boot rom) LD (DE), A
 	case 0x12: bus_write(bus, reg->de, reg->a); return 8;
@@ -868,6 +873,8 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 8;
 	}
 
+	//TODO: (post boot rom) SUB n
+	case 0xD6
 
 	// (post boot rom) RST n
 	case 0xC7: {
