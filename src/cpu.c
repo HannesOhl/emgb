@@ -185,6 +185,31 @@ static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 	}
 }
 
+static uint8_t add_r(Registers* reg, uint8_t r_val) {
+	uint8_t res = reg->a + r_val;
+	flag_con(reg, FLAG_Z, res == 0);
+	flag_clr(reg, FLAG_N);
+	flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (r_val & 0x0F)) > 0x0F);
+	flag_con(reg, FLAG_C, res < reg->a);
+	return res;
+}
+
+static uint8_t and_r(Registers* reg, uint8_t r_val) {
+	uint8_t res = reg->a & r_val;
+	flag_con(reg, FLAG_Z, res == 0);
+	flag_clr(reg, FLAG_N);
+	flag_set(reg, FLAG_H);
+	flag_clr(reg, FLAG_C);
+	return res;
+}
+
+static uint8_t xor_r(Registers* reg, uint8_t r_val) {
+	uint8_t res = reg->a ^ r_val;
+	flag_con(reg, FLAG_Z, res == 0);
+	reg->f &= 0b10000000;
+	return res;
+}
+
 static uint8_t inc_r(Registers* reg, uint8_t r) {
 
 	uint8_t result = r + 1;
@@ -406,7 +431,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x3A: reg->a = bus_read(bus, reg->hl--); return 8;
 
 	// LD r, r' 49/49
-	// b
 	case 0x40: reg->b = reg->b; return 4;
 	case 0x41: reg->b = reg->c; return 4;
 	case 0x42: reg->b = reg->d; return 4;
@@ -414,7 +438,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x44: reg->b = reg->h; return 4;
 	case 0x45: reg->b = reg->l; return 4;
 	case 0x47: reg->b = reg->a; return 4;
-	// c
 	case 0x48: reg->c = reg->b; return 4;
 	case 0x49: reg->c = reg->c; return 4;
 	case 0x4A: reg->c = reg->d; return 4;
@@ -422,7 +445,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x4C: reg->c = reg->h; return 4;
 	case 0x4D: reg->c = reg->l; return 4;
 	case 0x4F: reg->c = reg->a; return 4;
-	// d
 	case 0x50: reg->d = reg->b; return 4;
 	case 0x51: reg->d = reg->c; return 4;
 	case 0x52: reg->d = reg->d; return 4;
@@ -430,7 +452,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x54: reg->d = reg->h; return 4;
 	case 0x55: reg->d = reg->l; return 4;
 	case 0x57: reg->d = reg->a; return 4;
-	// e
 	case 0x58: reg->e = reg->b; return 4;
 	case 0x59: reg->e = reg->c; return 4;
 	case 0x5A: reg->e = reg->d; return 4;
@@ -438,7 +459,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x5C: reg->e = reg->h; return 4;
 	case 0x5D: reg->e = reg->l; return 4;
 	case 0x5F: reg->e = reg->a; return 4;
-	// h
 	case 0x60: reg->h = reg->b; return 4;
 	case 0x61: reg->h = reg->c; return 4;
 	case 0x62: reg->h = reg->d; return 4;
@@ -446,7 +466,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x64: reg->h = reg->h; return 4;
 	case 0x65: reg->h = reg->l; return 4;
 	case 0x67: reg->h = reg->a; return 4;
-	// l
 	case 0x68: reg->l = reg->b; return 4;
 	case 0x69: reg->l = reg->c; return 4;
 	case 0x6A: reg->l = reg->d; return 4;
@@ -454,7 +473,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x6C: reg->l = reg->h; return 4;
 	case 0x6D: reg->l = reg->l; return 4;
 	case 0x6F: reg->l = reg->a; return 4;
-	// a
 	case 0x78: reg->a = reg->b; return 4;
 	case 0x79: reg->a = reg->c; return 4;
 	case 0x7A: reg->a = reg->d; return 4;
@@ -482,69 +500,13 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x77: bus_write(bus, reg->hl, reg->a); return 8;
 
 	// (post boot rom) ADD r
-	case 0x80: {
-		uint16_t res = reg->a + reg->b;
-		flag_con(reg, FLAG_Z, res == 0);
-		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (reg->b & 0x0F)) > 0x0F);
-		flag_con(reg, FLAG_C, res > 0xFF);
-		reg->a = (uint8_t) res;
-		return 4;
-	}
-	case 0x81: {
-		uint16_t res = reg->a + reg->c;
-		flag_con(reg, FLAG_Z, res == 0);
-		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (reg->c & 0x0F)) > 0x0F);
-		flag_con(reg, FLAG_C, res > 0xFF);
-		reg->a = (uint8_t) res;
-		return 4;
-	}
-	case 0x82: {
-		uint16_t res = reg->a + reg->d;
-		flag_con(reg, FLAG_Z, res == 0);
-		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (reg->d & 0x0F)) > 0x0F);
-		flag_con(reg, FLAG_C, res > 0xFF);
-		reg->a = (uint8_t) res;
-		return 4;
-	}
-	case 0x83: {
-		uint16_t res = reg->a + reg->e;
-		flag_con(reg, FLAG_Z, res == 0);
-		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (reg->e & 0x0F)) > 0x0F);
-		flag_con(reg, FLAG_C, res > 0xFF);
-		reg->a = (uint8_t) res;
-		return 4;
-	}
-	case 0x84: {
-		uint16_t res = reg->a + reg->h;
-		flag_con(reg, FLAG_Z, res == 0);
-		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (reg->h & 0x0F)) > 0x0F);
-		flag_con(reg, FLAG_C, res > 0xFF);
-		reg->a = (uint8_t) res;
-		return 4;
-	}
-	case 0x85: {
-		uint16_t res = reg->a + reg->l;
-		flag_con(reg, FLAG_Z, res == 0);
-		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (reg->l & 0x0F)) > 0x0F);
-		flag_con(reg, FLAG_C, res > 0xFF);
-		reg->a = (uint8_t) res;
-		return 4;
-	}
-	case 0x87: {
-		uint16_t res = reg->a + reg->a;
-		flag_con(reg, FLAG_Z, res == 0);
-		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (reg->a & 0x0F)) > 0x0F);
-		flag_con(reg, FLAG_C, res > 0xFF);
-		reg->a = (uint8_t) res;
-		return 4;
-	}
+	case 0x80: reg->a = add_r(reg, reg->b); return 4;
+	case 0x81: reg->a = add_r(reg, reg->c); return 4;
+	case 0x82: reg->a = add_r(reg, reg->d); return 4;
+	case 0x83: reg->a = add_r(reg, reg->e); return 4;
+	case 0x84: reg->a = add_r(reg, reg->h); return 4;
+	case 0x85: reg->a = add_r(reg, reg->l); return 4;
+	case 0x87: reg->a = add_r(reg, reg->a); return 4;
 
 	// ADD (HL)
 	case 0x86: {
@@ -568,120 +530,22 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x97: reg->a = sub_r(reg, reg->a); return 4;
 
 	// (post boot rom) AND r
-	case 0xA0: {
-		   uint8_t res = reg->a & reg->b;
-		   flag_con(reg, FLAG_Z, res == 0);
-		   flag_clr(reg, FLAG_N);
-		   flag_set(reg, FLAG_H);
-		   flag_clr(reg, FLAG_C);
-		   reg->a = res;
-		   return 4;
-	}
-	case 0xA1: {
-		   uint8_t res = reg->a & reg->c;
-		   flag_con(reg, FLAG_Z, res == 0);
-		   flag_clr(reg, FLAG_N);
-		   flag_set(reg, FLAG_H);
-		   flag_clr(reg, FLAG_C);
-		   reg->a = res;
-		   return 4;
-	}
-	case 0xA2: {
-		   uint8_t res = reg->a & reg->d;
-		   flag_con(reg, FLAG_Z, res == 0);
-		   flag_clr(reg, FLAG_N);
-		   flag_set(reg, FLAG_H);
-		   flag_clr(reg, FLAG_C);
-		   reg->a = res;
-		   return 4;
-	}
-	case 0xA3: {
-		   uint8_t res = reg->a & reg->e;
-		   flag_con(reg, FLAG_Z, res == 0);
-		   flag_clr(reg, FLAG_N);
-		   flag_set(reg, FLAG_H);
-		   flag_clr(reg, FLAG_C);
-		   reg->a = res;
-		   return 4;
-	}
-	case 0xA4: {
-		   uint8_t res = reg->a & reg->h;
-		   flag_con(reg, FLAG_Z, res == 0);
-		   flag_clr(reg, FLAG_N);
-		   flag_set(reg, FLAG_H);
-		   flag_clr(reg, FLAG_C);
-		   reg->a = res;
-		   return 4;
-	}
-	case 0xA5: {
-		   uint8_t res = reg->a & reg->l;
-		   flag_con(reg, FLAG_Z, res == 0);
-		   flag_clr(reg, FLAG_N);
-		   flag_set(reg, FLAG_H);
-		   flag_clr(reg, FLAG_C);
-		   reg->a = res;
-		   return 4;
-	}
-	case 0xA7: {
-		   uint8_t res = reg->a & reg->a;
-		   flag_con(reg, FLAG_Z, res == 0);
-		   flag_clr(reg, FLAG_N);
-		   flag_set(reg, FLAG_H);
-		   flag_clr(reg, FLAG_C);
-		   reg->a = res;
-		   return 4;
-	}
+	case 0xA0: reg->a = and_r(reg, reg->b); return 4;
+	case 0xA1: reg->a = and_r(reg, reg->c); return 4;
+	case 0xA2: reg->a = and_r(reg, reg->d); return 4;
+	case 0xA3: reg->a = and_r(reg, reg->e); return 4;
+	case 0xA4: reg->a = and_r(reg, reg->h); return 4;
+	case 0xA5: reg->a = and_r(reg, reg->l); return 4;
+	case 0xA7: reg->a = and_r(reg, reg->a); return 4;
 
 	// XOR r
-	case 0xA8: {
-		uint8_t r = reg->a ^ reg->b;
-		flag_con(reg, FLAG_Z, r == 0);
-		reg->f &= 0b10000000;
-		reg->a = r;
-		return 4;
-	}
-	case 0xA9: {
-		uint8_t r = reg->a ^ reg->c;
-		flag_con(reg, FLAG_Z, r == 0);
-		reg->f &= 0b10000000;
-		reg->a = r;
-		return 4;
-	}
-	case 0xAA: {
-		uint8_t r = reg->a ^ reg->d;
-		flag_con(reg, FLAG_Z, r == 0);
-		reg->f &= 0b10000000;
-		reg->a = r;
-		return 4;
-	}
-	case 0xAB: {
-		uint8_t r = reg->a ^ reg->e;
-		flag_con(reg, FLAG_Z, r == 0);
-		reg->f &= 0b10000000;
-		reg->a = r;
-		return 4;
-	}
-	case 0xAC: {
-		uint8_t r = reg->a ^ reg->h;
-		flag_con(reg, FLAG_Z, r == 0);
-		reg->f &= 0b10000000;
-		reg->a = r;
-		return 4;
-	}
-	case 0xAD: {
-		uint8_t r = reg->a ^ reg->l;
-		flag_con(reg, FLAG_Z, r == 0);
-		reg->f &= 0b10000000;
-		reg->a = r;
-		return 4;
-	}
-	case 0xAF: {
-		uint8_t r = reg->a ^ reg->a;
-		flag_con(reg, FLAG_Z, r == 0);
-		reg->f &= 0b10000000;
-		reg->a = r;
-		return 4;
-	}
+	case 0xA8: reg->a = xor_r(reg, reg->b); return 4;
+	case 0xA9: reg->a = xor_r(reg, reg->c); return 4;
+	case 0xAA: reg->a = xor_r(reg, reg->d); return 4;
+	case 0xAB: reg->a = xor_r(reg, reg->e); return 4;
+	case 0xAC: reg->a = xor_r(reg, reg->h); return 4;
+	case 0xAD: reg->a = xor_r(reg, reg->l); return 4;
+	case 0xAF: reg->a = xor_r(reg, reg->a); return 4;
 
 	// (post boot rom) OR r
 	case 0xB0: reg->a = or_r(reg, reg->b); return 4;
@@ -874,7 +738,9 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	}
 
 	//TODO: (post boot rom) SUB n
-	case 0xD6
+	case 0xD6 : {
+		return 0;
+	}
 
 	// (post boot rom) RST n
 	case 0xC7: {
