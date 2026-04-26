@@ -47,8 +47,10 @@ typedef enum {
 
 typedef struct {
 	Registers reg;
-
+	bool ime;
+	bool ime_scheduled;
 	bool halted;
+	bool halt_bug;
 	bool stopped;
 
 	uint64_t cycles;

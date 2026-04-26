@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
 
 	bool running = true;
 	while (running) {
-	//	if (!bus.b_enabled) die("turned of dmg rom.\n");
+		//if (!bus.b_enabled) die("turned of dmg rom.\n");
 		while (SDL_PollEvent(&ctx->event) != 0) {
 			switch (ctx->event.type) {
 			case SDL_KEYDOWN: {
@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
 
 		uint32_t cycles = cpu_step(&cpu, &bus);
 		ppu_step(&ppu, ctx, cycles);
+		//stack_print(&cpu, &bus);
 	}
 
 	context_sdl_destroy(ctx);
