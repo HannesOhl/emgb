@@ -6,12 +6,15 @@
 
 static void flag_set(Registers* reg, Flag f) {
 	reg->f |= (uint8_t) f;
+	reg->f &= 0xF0;
 }
 static void flag_clr(Registers* reg, Flag f) {
 	reg->f &= (uint8_t) ~f;
+	reg->f &= 0xF0;
 }
 static void flag_con(Registers* reg, Flag f, bool cond) {
 	reg->f = cond ? (reg->f | (uint8_t) f) : (reg->f & (uint8_t) ~f);
+	reg->f &= 0xF0;
 }
 static bool flag_check(Registers* reg, Flag f) {
 	return ( (reg->f & (uint8_t) f) != 0 );
@@ -128,8 +131,15 @@ uint8_t sra(Registers* reg, uint8_t r_val) {
 	die("sra.\n"); (void) reg;
 	(void) r_val; return 0; }
 uint8_t swp(Registers* reg, uint8_t r_val) {
-	die("swp.\n"); (void) reg;
-	(void) r_val; return 0; }
+
+	uint8_t res = (r_val >> 4) | (r_val << 4);
+	flag_con(reg, FLAG_Z, res == 0);
+	flag_clr(reg, FLAG_N);
+	flag_clr(reg, FLAG_H);
+	flag_clr(reg, FLAG_C);
+	return res;
+}
+
 uint8_t srl(Registers* reg, uint8_t r_val) {
 	die("srl.\n"); (void) reg;
 	(void) r_val; return 0; }
@@ -198,6 +208,16 @@ static uint8_t add_r(Registers* reg, uint8_t r_val) {
 	flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (r_val & 0x0F)) > 0x0F);
 	flag_con(reg, FLAG_C, res < reg->a);
 	return res;
+}
+
+uint8_t adc_r(Registers* reg, uint8_t r_val) {
+	uint16_t c = flag_check(reg, FLAG_C) ? 1 : 0;
+	uint16_t res = (uint16_t) ((uint16_t) reg->a + (uint16_t) r_val + c);
+	flag_con(reg, FLAG_Z, ((res & 0xFF) == 0));
+	flag_clr(reg, FLAG_N);
+	flag_con(reg, FLAG_H, ((reg->a & 0x0F) + (r_val & 0x0F) + c > 0x0F));
+	flag_con(reg, FLAG_C, res > 0xFF);
+	return (uint8_t) res;
 }
 
 static uint8_t and_r(Registers* reg, uint8_t r_val) {
@@ -434,6 +454,29 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x23: reg->hl += 1; return 8;
 	case 0x33: reg->sp += 1; return 8;
 
+
+	// (post boot rom) INC (HL)
+	case 0x34: {
+		uint8_t data = bus_read(bus, reg->hl);
+		uint8_t res  = data + 1;
+		bus_write(bus, reg->hl, res);
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_clr(reg, FLAG_N);
+		flag_con(reg, FLAG_Z, ((data & 0x0F) + 1) > 0x0F);
+		return 12;
+	}
+	// (post boot rom) DEC (HL)
+	case 0x35: {
+		uint8_t data = bus_read(bus, reg->hl);
+		uint8_t res  = data - 1;
+		bus_write(bus, reg->hl, res);
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_set(reg, FLAG_N);
+		flag_con(reg, FLAG_Z, (data & 0x0F) == 0);
+		return 12;
+	}
+
+
 	// INC r
 	case 0x04: reg->b = inc_r(reg, reg->b); return 4;
 	case 0x14: reg->d = inc_r(reg, reg->d); return 4;
@@ -457,6 +500,17 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x1B: reg->de = dec_rr(reg->de); return 8;
 	case 0x2B: reg->hl = dec_rr(reg->hl); return 8;
 	case 0x3B: reg->sp = dec_rr(reg->sp); return 8;
+
+	// (post boot rom) RLCA
+	case 0x07: {
+		uint8_t c_in = reg->a >> 7;
+		reg->a = (reg->a << 1) | c_in;
+                flag_con(reg, FLAG_C, c_in);
+		flag_clr(reg, FLAG_Z);
+		flag_clr(reg, FLAG_N);
+		flag_clr(reg, FLAG_H);
+		return 4;
+	}
 
 	// RLA
 	case 0x17: {
@@ -546,6 +600,14 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	// LD A, (HL-)
 	case 0x3A: reg->a = bus_read(bus, reg->hl--); return 8;
 
+	// (post boot rom) CPL
+	case 0x2F: {
+		reg->a = ~reg->a;
+		flag_set(reg, FLAG_N);
+		flag_set(reg, FLAG_H);
+		return 4;
+	}
+
 	// LD r, r' 49/49
 	case 0x40: reg->b = reg->b; return 4;
 	case 0x41: reg->b = reg->c; return 4;
@@ -634,6 +696,15 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x84: reg->a = add_r(reg, reg->h); return 4;
 	case 0x85: reg->a = add_r(reg, reg->l); return 4;
 	case 0x87: reg->a = add_r(reg, reg->a); return 4;
+
+	// (post boot rom) ADC r
+	case 0x88: reg->a = adc_r(reg, reg->b); return 4;
+	case 0x89: reg->a = adc_r(reg, reg->c); return 4;
+	case 0x8A: reg->a = adc_r(reg, reg->d); return 4;
+	case 0x8B: reg->a = adc_r(reg, reg->e); return 4;
+	case 0x8C: reg->a = adc_r(reg, reg->h); return 4;
+	case 0x8D: reg->a = adc_r(reg, reg->l); return 4;
+	case 0x8F: reg->a = adc_r(reg, reg->a); return 4;
 
 	// ADD (HL)
 	case 0x86: {
@@ -1002,6 +1073,14 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		reg->pc = nn;
 		return 24;
 	}
+	// (post boot rom) RETI
+	case 0xD9 : {
+		uint8_t lsb = bus_read(bus, reg->sp++);
+		uint8_t msb = bus_read(bus, reg->sp++);
+		reg->pc = u16(lsb, msb);
+		cpu->ime = true;
+		return 16;
+	}
 
 	// LD (nn), A
 	case 0xEA: {
@@ -1020,6 +1099,17 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		flag_con(reg, FLAG_Z, res == 0);
 		flag_clr(reg, FLAG_N);
 		flag_set(reg, FLAG_H);
+		flag_clr(reg, FLAG_C);
+		return 8;
+	}
+	// (post boot rom) OR n
+	case 0xF6: {
+		uint8_t n = bus_read(bus, reg->pc++);
+		uint8_t res = reg->a | n;
+		reg->a = res;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_clr(reg, FLAG_N);
+		flag_clr(reg, FLAG_H);
 		flag_clr(reg, FLAG_C);
 		return 8;
 	}
@@ -1056,6 +1146,8 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		reg->a = bus_read(bus, u16(lsb, msb));
 		return 16;
 	}
+	// (post boot rom) EI
+	case 0xFB: cpu->ime_scheduled = true; return 4;
 
 	// CP n
 	case 0xFE: {
