@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#define HW_REG_IE 0xFFFF
+#define HW_REG_IF 0xFF0F
+
 typedef struct {
 
 	uint8_t b_rom[256];		// 0x0000 - 0x00FF 256 B

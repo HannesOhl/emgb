@@ -4,9 +4,6 @@
 
 #include "../inc/util.h"
 
-#define HW_REG_IE 0xFFFF
-#define HW_REG_IF 0xFF0F
-
 static void flag_set(Registers* reg, Flag f) {
 	reg->f |= (uint8_t) f;
 }
@@ -177,6 +174,7 @@ static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 		flag_con(reg, FLAG_Z, !(r_val & 1 << b));
 		flag_clr(reg, FLAG_N);
 		flag_set(reg, FLAG_H);
+		cycles = (r != 6) ? 8 : 12;
 		return cycles;
 	}
 
@@ -283,18 +281,101 @@ static uint8_t sub_r(Registers* reg, uint8_t r_val) {
 	return res;
 }
 
+static void interrupt_handle(Cpu* cpu, Bus* bus, bool* occured) {
+
+	Registers* reg = &cpu->reg;
+
+	uint8_t hw_ie = bus_read(bus, HW_REG_IE);
+	uint8_t hw_if = bus_read(bus, HW_REG_IF);
+	uint8_t requested = hw_ie & hw_if & 0x1F;
+	if (!requested) {
+		*occured = false;
+		return;
+	}
+
+	cpu->ime = false;
+	cpu->ime_scheduled = false;
+
+	uint8_t v = 0;
+	for (size_t i = 0; i < 5; i++) {
+		if (requested & (1 << i)) {
+			uint8_t r = bus_read(bus, HW_REG_IF);
+			bus_write(bus, HW_REG_IF, r &= (uint8_t) ~(1 << i));
+			v = (uint8_t) ((uint8_t) 0x40 + (uint8_t) i * (uint8_t) 0x08);
+			break;
+		}
+	}
+
+	reg->sp -= 2;
+	// Write hi first (hardware behaviour for push: SP-1 = hi, SP-2 = lo)
+	bus_write(bus, reg->sp + 1, (uint8_t) (reg->pc >> 8));
+	bus_write(bus, reg->sp    , (uint8_t) (reg->pc & 0xFF));
+	reg->pc = v;
+	*occured = true;
+}
+
+
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	Registers* reg = &cpu->reg;
 
-	uint8_t opcode = bus_read(bus, reg->pc);
-	if (cpu->halt_bug) {
-		cpu->halt_bug = false;
-	} else {
-		reg->pc++;
+	bool ei_delay = cpu->ime_scheduled;
+
+	// handle STOP state
+	if (cpu->stopped) {
+		uint8_t r = bus_read(bus, HW_REG_IF);
+		bool interrupt_flag = r & 0b00010000;
+		if (interrupt_flag) {
+			cpu->stopped = false;
+			bus_write(bus, HW_REG_IF, r &= (uint8_t) ~0b00010000);
+		} else {
+			return 4;
+		}
 	}
 
+	// handle HALT state
+	if (cpu->halted) {
+		uint8_t hw_ie = bus_read(bus, HW_REG_IE);
+		uint8_t hw_if = bus_read(bus, HW_REG_IF);
+		uint8_t requested = hw_ie & hw_if & 0x1F;
+		if (!requested) {
+			return 4;
+		}
+
+		if (ei_delay && cpu->ime_scheduled) {
+			cpu->ime = true;
+			cpu->ime_scheduled = false;
+		}
+		cpu->halted = false;
+		if (cpu->ime) {
+			bool occured = false;
+			interrupt_handle(cpu, bus, &occured);
+			return 20;
+		} else {
+			// execute next instruction
+		}
+	}
+
+	// handle interrupts
+	if (cpu->ime) {
+		bool occured = false;
+		interrupt_handle(cpu, bus, &occured);
+		if (occured) return 20;
+	}
+
+	uint8_t opcode = 0;
+	if (cpu->halt_bug) {
+		opcode = bus_read(bus, reg->pc);
+		cpu->halt_bug = false;
+	} else {
+		opcode = bus_read(bus, reg->pc++);
+	}
 	printf("executing opcode %02X\n", opcode);
+
+	if (ei_delay) {
+		cpu->ime = true;
+		cpu->ime_scheduled = false;
+	}
 
 	switch (opcode) {
 
@@ -304,43 +385,43 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	// (post boot rom) ADD HL, rr
 	case 0x09: {
 		uint16_t res = reg->hl + reg->bc;
-		reg->hl = res;
 		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->hl + 0x0FFF) + (reg->bc & 0x0FFFF)) > 0x0FFF);
-		flag_con(reg, FLAG_C, (reg->hl + reg->bc) > 0xFFFF);
+		flag_con(reg, FLAG_H, ((reg->hl & 0x0FFF) + (reg->bc & 0x0FFF)) > 0x0FFF);
+		flag_con(reg, FLAG_C, res < reg->hl);
+		reg->hl = res;
 		return 8;
 	}
 	case 0x19: {
 		uint16_t res = reg->hl + reg->de;
-		reg->hl = res;
 		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->hl + 0x0FFF) + (reg->de & 0x0FFFF)) > 0x0FFF);
-		flag_con(reg, FLAG_C, (reg->hl + reg->de) > 0xFFFF);
+		flag_con(reg, FLAG_H, ((reg->hl & 0x0FFF) + (reg->de & 0x0FFF)) > 0x0FFF);
+		flag_con(reg, FLAG_C, res < reg->hl);
+		reg->hl = res;
 		return 8;
 	}
 	case 0x29: {
 		uint16_t res = reg->hl + reg->hl;
-		reg->hl = res;
 		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->hl + 0x0FFF) + (reg->hl & 0x0FFFF)) > 0x0FFF);
-		flag_con(reg, FLAG_C, (reg->hl + reg->hl) > 0xFFFF);
+		flag_con(reg, FLAG_H, ((reg->hl & 0x0FFF) + (reg->hl & 0x0FFF)) > 0x0FFF);
+		flag_con(reg, FLAG_C, res < reg->hl);
+		reg->hl = res;
 		return 8;
 	}
 	case 0x39: {
 		uint16_t res = reg->hl + reg->sp;
-		reg->hl = res;
 		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_H, ((reg->hl + 0x0FFF) + (reg->sp & 0x0FFFF)) > 0x0FFF);
-		flag_con(reg, FLAG_C, (reg->hl + reg->sp) > 0xFFFF);
+		flag_con(reg, FLAG_H, ((reg->hl & 0x0FFF) + (reg->sp & 0x0FFF)) > 0x0FFF);
+		flag_con(reg, FLAG_C, res < reg->hl);
+		reg->hl = res;
 		return 8;
 	}
 
 	// (post boot rom) STOP
-	// TODO: handle this correctly
+	// TODO: handle this correctly, (cgb mode???)
 	case 0x10: {
 		uint8_t consume = bus_read(bus, reg->pc++);
 		(void) consume;
-		//cpu->stopped = true;
+		cpu->stopped = true;
 		return 4;
 	}
 
@@ -653,6 +734,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		uint8_t lsb = bus_read(bus, reg->sp++);
 		uint8_t msb = bus_read(bus, reg->sp++);
 		reg->af = u16(lsb, msb);
+		reg->f &= 0xF0;
 		return 12;
 	}
 
