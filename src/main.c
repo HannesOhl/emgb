@@ -2,9 +2,20 @@
 #include "../inc/cpu.h"
 #include "../inc/bus.h"
 #include "../inc/ppu.h"
+#include "../inc/timer.h"
 #include "../inc/util.h"
 
 static char* pname;
+
+static void joypad_handle(Bus* bus, SDL_KeyCode key, bool pressed) {
+
+	switch (key) {
+
+	case SDLK_RIGHT: bus_joypad_set(bus, JOY_A, pressed); break;
+	default: break;
+
+	}
+}
 
 int main(int argc, char** argv) {
 
@@ -34,6 +45,9 @@ int main(int argc, char** argv) {
 	Ppu ppu = {0};
 	ppu_init(&ppu, &bus, buffer);
 
+	Tmr tmr = {0};
+	tmr_init(&tmr, &bus);
+
 	bool running = true;
 	while (running) {
 		//if (!bus.b_enabled) die("turned of dmg rom.\n");
@@ -41,6 +55,10 @@ int main(int argc, char** argv) {
 			switch (ctx->event.type) {
 			case SDL_KEYDOWN: {
 				if (ctx->event.key.keysym.sym == SDLK_ESCAPE) running = false;
+				joypad_handle(&bus, ctx->event.key.keysym.sym, true);
+			} break;
+			case SDL_KEYUP: {
+				joypad_handle(&bus, ctx->event.key.keysym.sym, false);
 			} break;
 			default: {} break;
 			}
@@ -48,6 +66,7 @@ int main(int argc, char** argv) {
 
 		uint32_t cycles = cpu_step(&cpu, &bus);
 		ppu_step(&ppu, ctx, cycles);
+		tmr_step(&tmr, &bus, cycles);
 		//stack_print(&cpu, &bus);
 	}
 
