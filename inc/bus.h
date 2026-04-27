@@ -20,6 +20,7 @@
 #define IO_SCX  0xFF43
 #define IO_LY   0xFF44
 #define IO_LYC  0xFF45
+#define IO_DMA  0xFF46
 #define IO_BGP  0xFF47
 #define IO_OBP0 0xFF48
 #define IO_OBP1 0xFF49
