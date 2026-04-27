@@ -10,10 +10,15 @@ static char* pname;
 static void joypad_handle(Bus* bus, SDL_KeyCode key, bool pressed) {
 
 	switch (key) {
-
-	case SDLK_RIGHT: bus_joypad_set(bus, JOY_A, pressed); break;
+	case SDLK_x:      bus_joypad_set(bus, JOY_A, pressed); break;
+	case SDLK_y:      bus_joypad_set(bus, JOY_B, pressed); break;
+	case SDLK_RETURN: bus_joypad_set(bus, JOY_START, pressed); break;
+	case SDLK_RSHIFT: bus_joypad_set(bus, JOY_SELECT, pressed); break;
+	case SDLK_LEFT:   bus_joypad_set(bus, JOY_LEFT, pressed); break;
+	case SDLK_RIGHT:  bus_joypad_set(bus, JOY_RIGHT, pressed); break;
+	case SDLK_UP:     bus_joypad_set(bus, JOY_UP, pressed); break;
+	case SDLK_DOWN:   bus_joypad_set(bus, JOY_DOWN, pressed); break;
 	default: break;
-
 	}
 }
 

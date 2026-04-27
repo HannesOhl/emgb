@@ -141,8 +141,13 @@ uint8_t swp(Registers* reg, uint8_t r_val) {
 }
 
 uint8_t srl(Registers* reg, uint8_t r_val) {
-	die("srl.\n"); (void) reg;
-	(void) r_val; return 0; }
+	flag_con(reg, FLAG_C, r_val & 1);
+	uint8_t res = r_val >> 1;
+	flag_con(reg, FLAG_Z , res == 0);
+	flag_clr(reg, FLAG_N);
+	flag_clr(reg, FLAG_H);
+	return res;
+}
 
 // 0b xx xxx xxx
 //     ^   ^   ^
@@ -390,7 +395,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	} else {
 		opcode = bus_read(bus, reg->pc++);
 	}
-	printf("executing opcode %02X\n", opcode);
+	//printf("executing opcode %02X\n", opcode);
 
 	if (ei_delay) {
 		cpu->ime = true;
@@ -462,7 +467,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		bus_write(bus, reg->hl, res);
 		flag_con(reg, FLAG_Z, res == 0);
 		flag_clr(reg, FLAG_N);
-		flag_con(reg, FLAG_Z, ((data & 0x0F) + 1) > 0x0F);
+		flag_con(reg, FLAG_H, ((data & 0x0F) + 1) > 0x0F);
 		return 12;
 	}
 	// (post boot rom) DEC (HL)
@@ -472,7 +477,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		bus_write(bus, reg->hl, res);
 		flag_con(reg, FLAG_Z, res == 0);
 		flag_set(reg, FLAG_N);
-		flag_con(reg, FLAG_Z, (data & 0x0F) == 0);
+		flag_con(reg, FLAG_H, (data & 0x0F) == 0x00);
 		return 12;
 	}
 
@@ -600,6 +605,37 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	// LD A, (HL-)
 	case 0x3A: reg->a = bus_read(bus, reg->hl--); return 8;
 
+	// (post boot rom) DAA
+	case 0x27: {
+		uint8_t a = reg->a;
+		uint8_t c = flag_check(reg, FLAG_C);
+
+		if (!flag_check(reg, FLAG_N)) {
+			if (flag_check(reg, FLAG_H) || (a & 0x0F) > 9) {
+				a += 0x06;
+			}
+			if (c || a > 0x9F) {
+				a += 0x60;
+				c = 1;
+			}
+		} else {
+			if (flag_check(reg, FLAG_H)) {
+				a -= 0x06;
+			}
+			if (c) {
+			a -= 0x60;
+			}
+		}
+
+
+		reg->a = a;
+		flag_con(reg, FLAG_Z, reg->a == 0);
+		flag_clr(reg, FLAG_H);
+		flag_con(reg, FLAG_C, c);
+
+		return 4;
+	}
+
 	// (post boot rom) CPL
 	case 0x2F: {
 		reg->a = ~reg->a;
@@ -704,6 +740,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	case 0x8B: reg->a = adc_r(reg, reg->e); return 4;
 	case 0x8C: reg->a = adc_r(reg, reg->h); return 4;
 	case 0x8D: reg->a = adc_r(reg, reg->l); return 4;
+	case 0x8E: reg->a = adc_r(reg, bus_read(bus, reg->hl)); return 8;
 	case 0x8F: reg->a = adc_r(reg, reg->a); return 4;
 
 	// ADD (HL)
@@ -717,6 +754,8 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		reg->a = res;
 		return 8;
 	}
+
+	// (post boot rom) ADC (HL)
 
 	// SUB r
 	case 0x90: reg->a = sub_r(reg, reg->b); return 4;
@@ -1135,6 +1174,16 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	// LDH (C), A
 	case 0xE2: bus_write(bus, u16(reg->c, 0xFF), reg->a); return 8;
+
+	case 0xEE: {
+		uint8_t n = bus_read(bus, reg->pc++);
+		uint8_t res = reg->a ^ n;
+		reg->a = res;
+		flag_con(reg, FLAG_Z, res == 0);
+		flag_clr(reg, FLAG_N);
+		flag_clr(reg, FLAG_H);
+		flag_clr(reg, FLAG_C);
+	}
 
 	// (post boot rom) DI
 	case 0xF3: cpu->ime = false; return 4;
