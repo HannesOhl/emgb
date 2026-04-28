@@ -13,7 +13,7 @@ void context_sdl_init(SDLContext* ctx) {
 
 	SDL_Init(SDL_INIT_VIDEO);
 	ctx->window = SDL_CreateWindow("SoftRend", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-						   SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+						   (int32_t) SCREEN_WIDTH, (int32_t) SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
 	if (!ctx->window) fprintf(stderr, "Failed to create window. Error: %s\n", SDL_GetError());
 
 	ctx->surface = SDL_GetWindowSurface(ctx->window);

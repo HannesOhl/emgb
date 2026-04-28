@@ -3,12 +3,16 @@
 #include "../inc/util.h"
 #include "../inc/backend_sdl.h"
 
+#define LCDC_ENABLE 0x80
+#define OAM_SIZE 160
+static bool line_rendered = false;
+
 static uint32_t bw_palette[4] = {
     0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000
 };
 
 static inline uint32_t palette_color(uint8_t shade) {
-    return bw_palette[shade & 3u];
+    return bw_palette[shade & 3];
 }
 
 void ppu_init(Ppu* ppu, Bus* bus, uint32_t* buffer) {
@@ -17,10 +21,6 @@ void ppu_init(Ppu* ppu, Bus* bus, uint32_t* buffer) {
 	ppu->pixels = buffer;
 	ppu->dots   = 0;
 }
-
-#define LCDC_ENABLE 0x80
-#define OAM_SIZE 160
-static bool line_rendered = false;
 
 void interrupt_send(Bus* bus, uint8_t n) {
 	uint8_t flag = bus_read(bus, IO_IF);
