@@ -16,11 +16,11 @@ static uint8_t joypad_select(Bus* bus) {
 	if ((bus->joyp_select & 0x20)) {
 		low &= bus->joyp_buttons;
 	}
-	printf("SEL=%02X BTN=%02X DPAD=%02X\n",
+	/*printf("SEL=%02X BTN=%02X DPAD=%02X\n",
     	bus->joyp_select,
     	bus->joyp_buttons,
 	bus->joyp_dpad
-);
+	);*/
 
 	return low;
 }
@@ -117,6 +117,7 @@ void bus_joypad_set(Bus* bus, JoypadButton button, bool pressed) {
 			 printf("pressed select\n"); break;
 	case JOY_START:  row = &bus->joyp_buttons; mask = 1 << 3;
 			 printf("pressed start\n"); break;
+	default: {} break;
 	}
 
 	uint8_t before = *row;

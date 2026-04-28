@@ -13,8 +13,7 @@ typedef struct {
 	Bus* bus;
 
 	uint32_t dots;
-	uint8_t ly;
-
+	uint8_t window_line;
 	uint32_t* pixels;
 } Ppu;
 

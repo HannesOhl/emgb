@@ -1183,6 +1183,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		flag_clr(reg, FLAG_N);
 		flag_clr(reg, FLAG_H);
 		flag_clr(reg, FLAG_C);
+		return 8;
 	}
 
 	// (post boot rom) DI

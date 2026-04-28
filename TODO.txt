@@ -1,1 +1,4 @@
 - maybe rework naming scheme for hardware registers
+- LY should be owned by ppu, so maybe put it in ppu struct and handly writes to IO_LY
+	accordingly
+-
