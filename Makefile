@@ -21,12 +21,14 @@ SOURCE := src/main.c src/backend_sdl.c src/cpu.c src/bus.c src/ppu.c src/timer.c
 OBJECT := $(SOURCE:.c=.o)
 
 all: $(TARGET)
+	@exec echo -e "\x1B[0;1;36m [ LD ]\x1B[0m xemgb"
 
 $(TARGET): $(OBJECT)
-	$(CC) $(OBJECT) $(LFLAGS) -o $@
+	@$(CC) $(OBJECT) $(LFLAGS) -o $@
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	@exec echo -e "\x1B[0;1;35m [ CC ]\x1B[0m $@"
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 # debug build
 debug: CFLAGS := $(CFLAGS) $(DFLAGS) $(SFLAGS)
@@ -34,7 +36,7 @@ debug: LFLAGS := $(LFLAGS) $(SFLAGS)
 debug: rebuild
 
 clean:
-	rm -f $(OBJECT) && rm -f $(TARGET)
+	@rm -f $(OBJECT) && rm -f $(TARGET)
 
 rebuild: clean all
 

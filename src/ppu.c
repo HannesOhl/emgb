@@ -3,7 +3,26 @@
 #include "../inc/util.h"
 #include "../inc/backend_sdl.h"
 
-#define LCDC_ENABLE 0x80
+#define LCDC_ENABLE 			0x80
+#define LCDC_BACKGROUND_ENABLE 		0x01
+#define LCDC_SPRITE_ENABLE 		0x02
+#define LCDC_SPRITE_SIZE   		0x04
+#define LCDC_BACKGROUND_MAP_SELECT 	0x08
+#define LCDC_WINDOW_ENABLE 		0x20
+#define LCDC_WINDOW_MAP 		0x40
+
+#define MODE_HBLANK 0
+#define MODE_VBLANK 1
+#define MODE_OAM    2
+#define MODE_VRAM   3
+
+#define SCANLINE_DOTS   456
+#define OAM_SEARCH_END   79
+#define VRAM_SEARCH_END 251
+#define LINE_END        455
+#define VISIBLE_LINES   144
+#define TOTAL_LINES     154
+
 #define OAM_SIZE 160
 static bool line_rendered = false;
 
@@ -26,6 +45,10 @@ void interrupt_send(Bus* bus, uint8_t n) {
 	uint8_t flag = bus_read(bus, IO_IF);
 	flag |= (1 << n);
 	bus_write(bus, IO_IF, flag);
+}
+
+static inline uint8_t set_stat_mode(uint8_t stat, uint8_t mode) {
+	return ((stat & (uint8_t) ~0x03) | (mode & 0x03));
 }
 
 static inline uint8_t shade_from_palette(uint8_t palette, uint8_t color_index) {
@@ -76,10 +99,12 @@ void line_render(Ppu* ppu, uint8_t ly) {
 	uint8_t lcdc = bus_read(bus, IO_LCDC);
 	uint8_t bgp  = bus_read(bus, IO_BGP);
 
+	uint8_t line_bg_indices[SCREEN_WIDTH];
+
 	// for background
 	uint8_t scx = bus_read(bus, IO_SCX);
 	uint8_t scy = bus_read(bus, IO_SCY);
-	uint16_t base_b = (lcdc & (1u << 3)) ? 0x9C00 : 0x9800;
+	uint16_t base_b = (lcdc & (1 << 3)) ? 0x9C00 : 0x9800;
 
 	// for window
 	uint8_t wy = bus_read(bus, IO_WY);
@@ -92,7 +117,7 @@ void line_render(Ppu* ppu, uint8_t ly) {
 
 		uint8_t color_index = 0;
 
-		if (lcdc & 0x01) {
+		if (lcdc & LCDC_BACKGROUND_ENABLE) {
 			color_index = pixel_index(ppu, base_b, (uint16_t) (x + scx), (uint16_t) (ly + scy));
 		}
 
@@ -100,11 +125,102 @@ void line_render(Ppu* ppu, uint8_t ly) {
         	if (w && (int16_t) x >= wx_origin) {
 			color_index = pixel_index(ppu, base_w, (uint16_t) ((int16_t) x - wx_origin), ppu->window_line);
         	}
-
+		line_bg_indices[x] = color_index;
         	ppu->pixels[x + ly * SCREEN_WIDTH] = palette_color(shade_from_palette(bgp, color_index));
     	}
-
 	if (w) ppu->window_line++;
+
+	// sprites disabled
+	if (!(lcdc & LCDC_SPRITE_ENABLE)) {
+		line_rendered = true;
+		return;
+	}
+
+	// render sprites
+	const uint8_t sprite_h = (lcdc & LCDC_SPRITE_SIZE) ? 16 : 8;
+	const uint8_t* oam = bus->oa_ram;
+
+	typedef struct {
+		int16_t sy;
+		int16_t sx;
+		uint8_t tile;
+		uint8_t flags;
+	} SpriteInfo;
+
+	SpriteInfo visible[10];
+	uint32_t visible_count = 0;
+
+	// collect up to 10 visible sprites in OAM order
+	for (uint32_t sprite = 0; sprite < 40 && visible_count < 10; sprite++) {
+		const uint8_t* entry = oam + (sprite * 4);
+		int16_t sy = (int16_t) entry[0] - 16;
+		int16_t sx = (int16_t) entry[1] - 8;
+
+		if ((int16_t) ly < sy || (int16_t) ly >= (sy + (int16_t) sprite_h)) {
+			continue;
+		}
+		visible[visible_count++] = (SpriteInfo) { sy, sx, entry[2], entry[3] };
+	}
+
+	// sort by x ascending, OAM order preserved on ties
+	for (uint32_t i = 0; i < visible_count; i++) {
+	for (uint32_t j = i + 1; j < visible_count; j++) {
+		if (visible[j].sx < visible[i].sx) {
+			SpriteInfo tmp = visible[i];
+			visible[i] = visible[j];
+			visible[j] = tmp;
+		}
+	}}
+
+	// draw in reverse OAM order so lower OAM index wins
+	for (int32_t s = (int32_t) visible_count - 1; s >= 0; s--) {
+		SpriteInfo sp = visible[s];
+
+		uint8_t tile = sp.tile;
+		uint8_t flags = sp.flags;
+
+		uint8_t row = (uint8_t) ((int16_t) ly - sp.sy);
+
+		if (flags & 0x40) {
+			row = (uint8_t) ((sprite_h - 1) - row);
+		}
+
+		if (sprite_h == 16) {
+			tile &= 0xFE;
+			if (row >= 8) {
+				tile = (uint8_t) (tile + 1);
+				row  = (uint8_t) (row - 8);
+			}
+		}
+
+		uint16_t tile_addr = (uint16_t) (0x8000 + (uint16_t) tile * 16);
+		uint8_t low  = bus_read(bus, (uint16_t) (tile_addr + (uint16_t) (row * 2)));
+		uint8_t high = bus_read(bus, (uint16_t) (tile_addr + (uint16_t) (row * 2) + 1));
+
+		uint8_t palette = (flags & 0x10) ? bus_read(bus, IO_OBP1) : bus_read(bus, IO_OBP0);
+		bool behind_bg = (flags & 0x80) != 0;
+		bool xflip = (flags & 0x20) != 0;
+
+		for (uint32_t px = 0; px < 8; px++) {
+			int16_t screen_x = sp.sx + (int16_t) px;
+			if (screen_x < 0 || screen_x >= (int16_t) SCREEN_WIDTH) {
+				continue;
+			}
+
+			uint8_t bit = xflip ? (uint8_t) px : (uint8_t) (7 - px);
+			uint8_t color_index = (uint8_t) ((((high >> bit) & 1u) << 1u) | ((low >> bit) & 1u));
+			if (color_index == 0) {
+				continue;
+			}
+
+			if (behind_bg && line_bg_indices[screen_x] != 0) {
+				continue;
+			}
+
+			uint8_t shade = shade_from_palette(palette, color_index);
+			ppu->pixels[(ly * SCREEN_WIDTH) + (uint32_t) screen_x] = palette_color(shade);
+		}
+	}
 	line_rendered = true;
 }
 
@@ -141,12 +257,12 @@ void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycles) {
 	uint8_t stat = bus_read(bus, IO_STAT);
 
 	if (mode == 1) {
-		if (ppu->dots >= 456) {
-			ppu->dots -= 456;
+		if (ppu->dots >= SCANLINE_DOTS) {
+			ppu->dots -= SCANLINE_DOTS;
 			ly += 1;
 			line_rendered = false;
-			if (ly >= 154) {
-				stat = (stat & (uint8_t) ~0x03) | 0x02;
+			if (ly >= TOTAL_LINES) {
+				stat = set_stat_mode(stat, MODE_OAM);
 				ly = 0;
 				ppu->window_line = 0;
 				if (stat & 0x20) interrupt_send(bus, 1);
@@ -164,35 +280,35 @@ void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycles) {
 		return;
 	}
 
-	if (ppu->dots <= 79) {
+	if (ppu->dots <= OAM_SEARCH_END) {
 		// mode 2, read OAM
-		stat = (stat & (uint8_t) ~0x03) | 0x02;
+		stat = set_stat_mode(stat, MODE_OAM);
 
 		if (mode != 2 && (stat & 0x20)) interrupt_send(bus, 1);
 
-	} else if (ppu->dots <= 251) {
+	} else if (ppu->dots <= VRAM_SEARCH_END) {
 		// mode 3, read OAM and VRAM
-		stat = (stat & (uint8_t) ~0x03) | 0x03;
+		stat = set_stat_mode(stat, MODE_VRAM);
 
 		if (!line_rendered) line_render(ppu, ly);
 
-	} else if (ppu->dots <= 455) {
+	} else if (ppu->dots <= LINE_END) {
 		// mode 0, HBlank
-		stat &= (uint8_t) ~0x03;
+		stat = set_stat_mode(stat, MODE_HBLANK);
 
 		if (mode != 0 && (stat & 0x08)) interrupt_send(bus, 1);
 	} else {
 		// horizontal line complete
-		ppu->dots -= 456;
+		ppu->dots -= SCANLINE_DOTS;
 		ly += 1;
 		line_rendered = false;
 
-		if (ly >= 144) {
-			stat = (stat & (uint8_t) ~0x03) | 0x01;
+		if (ly >= VISIBLE_LINES) {
+			stat = set_stat_mode(stat, MODE_VBLANK);
 			interrupt_send(bus, 0);
 			SDL_UpdateWindowSurface(ctx->window);
 		} else {
-			stat = (stat & (uint8_t) ~0x03) | 0x02;
+			stat = set_stat_mode(stat, MODE_OAM);
 			if (mode != 2 && (stat & 0x20)) interrupt_send(bus, 1);
 		}
 
