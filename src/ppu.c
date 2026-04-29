@@ -112,7 +112,7 @@ void line_render(Ppu* ppu, uint8_t ly) {
 	int16_t wx_origin = (int16_t) wx - 7;
 	uint16_t base_w = (lcdc & (1 << 6)) ? 0x9C00 : 0x9800;
 
-	bool w = (lcdc & 0x20) && (ly >= wy) && (wx_origin < 160);
+	bool w = (lcdc & LCDC_WINDOW_ENABLE) && (ly >= wy) && (wx_origin < 160);
 	for (uint8_t x = 0; x < SCREEN_WIDTH; x++) {
 
 		uint8_t color_index = 0;
@@ -297,6 +297,7 @@ void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycles) {
 		stat = set_stat_mode(stat, MODE_HBLANK);
 
 		if (mode != 0 && (stat & 0x08)) interrupt_send(bus, 1);
+
 	} else {
 		// horizontal line complete
 		ppu->dots -= SCANLINE_DOTS;
