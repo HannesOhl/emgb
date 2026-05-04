@@ -7,18 +7,42 @@
 
 static char* pname;
 
-static void joypad_handle(Bus* bus, SDL_KeyCode key, bool pressed) {
+#define BUTTON 		(1 << 5)
+#define DPAD 		(1 << 4)
+#define BUTTON_A        0x01
+#define BUTTON_B        0x02
+#define BUTTON_SELECT   0x04
+#define BUTTON_START    0x08
+#define BUTTON_RIGHT    0x10
+#define BUTTON_LEFT     0x20
+#define BUTTON_UP       0x40
+#define BUTTON_DOWN     0x80
 
-	switch (key) {
-	case SDLK_x:      bus_joypad_set(bus, JOY_A, pressed); break;
-	case SDLK_y:      bus_joypad_set(bus, JOY_B, pressed); break;
-	case SDLK_RETURN: bus_joypad_set(bus, JOY_START, pressed); break;
-	case SDLK_RSHIFT: bus_joypad_set(bus, JOY_SELECT, pressed); break;
-	case SDLK_LEFT:   bus_joypad_set(bus, JOY_LEFT, pressed); break;
-	case SDLK_RIGHT:  bus_joypad_set(bus, JOY_RIGHT, pressed); break;
-	case SDLK_UP:     bus_joypad_set(bus, JOY_UP, pressed); break;
-	case SDLK_DOWN:   bus_joypad_set(bus, JOY_DOWN, pressed); break;
+void joypad_handle(SDL_Keycode key, bool pressed) {
+
+	(void) pressed;
+	switch(key) {
+	case SDLK_RIGHT: printf("pressed: ->\n"); break;
 	default: break;
+	}
+}
+
+
+void input_handle(Bus* bus, SDL_Event* e, bool* running) {
+
+	switch (e->type) {
+
+	case SDL_KEYDOWN: {
+		if (e->key.keysym.sym == SDLK_ESCAPE) *running = false;
+		//joypad_handle(e->key.keysym.sym, true);
+	} break;
+
+	case SDL_KEYUP: {
+		//joypad_handle(e->key.keysym.sym, false);
+	} break;
+
+	default: break;
+
 	}
 }
 
@@ -41,7 +65,6 @@ int main(int argc, char** argv) {
 	Cpu cpu = {0};
 	cpu_init(&cpu);
 
-
 	SDLContext* ctx = calloc((size_t) 1, (size_t) sizeof *ctx);
 	context_sdl_init(ctx);
 	uint32_t* buffer = ctx->surface->pixels;
@@ -56,17 +79,9 @@ int main(int argc, char** argv) {
 	bool running = true;
 	while (running) {
 		//if (!bus.b_enabled) die("turned of dmg rom.\n");
+
 		while (SDL_PollEvent(&ctx->event) != 0) {
-			switch (ctx->event.type) {
-			case SDL_KEYDOWN: {
-				if (ctx->event.key.keysym.sym == SDLK_ESCAPE) running = false;
-				joypad_handle(&bus, ctx->event.key.keysym.sym, true);
-			} break;
-			case SDL_KEYUP: {
-				joypad_handle(&bus, ctx->event.key.keysym.sym, false);
-			} break;
-			default: {} break;
-			}
+			input_handle(&bus, &ctx->event, &running);
 		}
 
 		uint32_t cycles = cpu_step(&cpu, &bus);

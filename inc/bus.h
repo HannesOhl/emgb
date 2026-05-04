@@ -28,17 +28,6 @@
 #define IO_WX   0xFF4B
 #define IO_IF2  0xFF0F
 
-typedef enum {
-	JOY_RIGHT,
-	JOY_LEFT,
-	JOY_UP,
-	JOY_DOWN,
-	JOY_A,
-	JOY_B,
-	JOY_SELECT,
-	JOY_START
-} JoypadButton;
-
 typedef struct {
 
 	uint8_t b_rom[256];		// 0x0000 - 0x00FF 256 B
@@ -64,8 +53,6 @@ void bus_init(Bus* bus, FILE* b_rom, FILE* rom);
 uint8_t bus_read(Bus* bus, uint16_t addr);
 uint16_t bus_read_16(Bus* bus, uint16_t addr);
 void bus_write(Bus* bus, uint16_t addr, uint8_t val);
-
-void bus_joypad_set(Bus* bus, JoypadButton button, bool pressed);
 
 #endif
 
