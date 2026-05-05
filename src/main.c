@@ -7,38 +7,53 @@
 
 static char* pname;
 
-#define BUTTON 		(1 << 5)
-#define DPAD 		(1 << 4)
-#define BUTTON_A        0x01
-#define BUTTON_B        0x02
-#define BUTTON_SELECT   0x04
-#define BUTTON_START    0x08
-#define BUTTON_RIGHT    0x10
-#define BUTTON_LEFT     0x20
-#define BUTTON_UP       0x40
-#define BUTTON_DOWN     0x80
+#define BUTTON_A        0x10
+#define BUTTON_B        0x20
+#define BUTTON_SELECT   0x40
+#define BUTTON_START    0x80
+#define BUTTON_RIGHT    0x01
+#define BUTTON_LEFT     0x02
+#define BUTTON_UP       0x04
+#define BUTTON_DOWN     0x08
 
-void joypad_handle(SDL_Keycode key, bool pressed) {
+void joypad_handle(Bus* bus, SDL_Keycode key, bool pressed) {
 
-	(void) pressed;
+
+	uint8_t mask = 0;
+
 	switch(key) {
-	case SDLK_RIGHT: printf("pressed: ->\n"); break;
+	case SDLK_RIGHT:  mask = (uint8_t) BUTTON_RIGHT; break;
+	case SDLK_LEFT:   mask = (uint8_t) BUTTON_LEFT;  break;
+	case SDLK_UP:     mask = (uint8_t) BUTTON_RIGHT; break;
+	case SDLK_DOWN:   mask = (uint8_t) BUTTON_LEFT;  break;
+	case SDLK_y:      mask = (uint8_t) BUTTON_A;     break;
+	case SDLK_x:      mask = (uint8_t) BUTTON_B;     break;
+	case SDLK_RETURN: mask = (uint8_t) BUTTON_START; break;
+	case SDLK_RCTRL:  mask = (uint8_t) BUTTON_SELECT; break;
 	default: break;
 	}
-}
 
+	if (pressed) {
+		bus->input_state &= ~mask;
+	} else {
+		bus->input_state |=  mask;
+	}
+}
 
 void input_handle(Bus* bus, SDL_Event* e, bool* running) {
 
 	switch (e->type) {
 
 	case SDL_KEYDOWN: {
-		if (e->key.keysym.sym == SDLK_ESCAPE) *running = false;
-		//joypad_handle(e->key.keysym.sym, true);
+		if (e->key.keysym.sym == SDLK_ESCAPE) {
+			*running = false;
+			return;
+		}
+		joypad_handle(bus, e->key.keysym.sym, true);
 	} break;
 
 	case SDL_KEYUP: {
-		//joypad_handle(e->key.keysym.sym, false);
+		joypad_handle(bus, e->key.keysym.sym, false);
 	} break;
 
 	default: break;

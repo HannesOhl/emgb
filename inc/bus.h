@@ -43,9 +43,7 @@ typedef struct {
 	uint8_t io_ram[128];  		// 0xFF00 - 0xFF7F 128 B
 	uint8_t hi_ram[128];		// 0xFF80 - 0xFFFF 128 B
 
-	uint8_t joyp_select;
-	uint8_t joyp_dpad;
-	uint8_t joyp_buttons;
+	uint8_t input_state;
 } Bus;
 
 void bus_init(Bus* bus, FILE* b_rom, FILE* rom);
@@ -53,6 +51,8 @@ void bus_init(Bus* bus, FILE* b_rom, FILE* rom);
 uint8_t bus_read(Bus* bus, uint16_t addr);
 uint16_t bus_read_16(Bus* bus, uint16_t addr);
 void bus_write(Bus* bus, uint16_t addr, uint8_t val);
+
+void interrupt_send(Bus* bus, uint8_t n);
 
 #endif
 

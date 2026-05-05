@@ -5,9 +5,32 @@
 
 #define MAX_ROM_SIZE 8000000
 
+void interrupt_send(Bus* bus, uint8_t n) {
+	uint8_t flag = bus_read(bus, IO_IF);
+	flag |= (1 << n);
+	bus_write(bus, IO_IF, flag);
+}
+
 static uint8_t joypad_read(Bus* bus) {
 
-	return 0xFF;
+	uint8_t selection = bus->io_ram[IO_P1 - 0xFF00];
+	uint8_t res = 0xC0 | (selection & 0x30) | 0x0F;
+
+	if ((selection & 0x10) == 0) {
+		res &= (0xF0 | (bus->input_state & 0x0F));
+	}
+
+	if ((selection & 0x20) == 0) {
+		res &= (0xF0 | ((bus->input_state >> 4) & 0x0F));
+	}
+
+	return res;
+}
+
+static void joypad_write(Bus* bus, uint8_t val) {
+	uint8_t res = bus_read(bus, IO_P1);
+	res = (res & 0xCF) | (val & 0x30);
+	bus->io_ram[IO_P1 - 0xFF00] = (res & 0xCF) | (val & 0x30);
 }
 
 uint8_t bus_read(Bus* bus, uint16_t addr) {
@@ -46,7 +69,7 @@ void bus_write(Bus* bus, uint16_t addr, uint8_t val) {
 	// disable boot rom
 	if (addr == 0xFF50 && val != 0) { bus->b_enabled = false; return; }
 
-	if (addr < 0x8000) return;
+	if (addr < 0x8000) { return; }
 
 	if (addr < 0xA000) { bus-> v_ram[addr - 0x8000] = val;  return; }
 	if (addr < 0xC000) { bus-> c_ram[addr - 0xA000] = val;  return; }
@@ -54,6 +77,8 @@ void bus_write(Bus* bus, uint16_t addr, uint8_t val) {
 	if (addr < 0xFE00) { bus-> w_ram[addr - 0xE000] = val;  return; }
 	if (addr < 0xFEA0) { bus->oa_ram[addr - 0xFE00] = val;  return; }
 	if (addr < 0xFF00) { return; }
+
+	if (addr == IO_P1) { joypad_write(bus, val); return;}
 
 	if (addr == 0xFF46) {
 		uint16_t src = (uint16_t)val << 8;
@@ -80,11 +105,9 @@ void bus_init(Bus* bus, FILE* rom_b, FILE* rom) {
 
 	bus->b_enabled = true;
 
-	bus->joyp_select  = 0x30;
-	bus->joyp_dpad    = 0x0F;
-	bus->joyp_buttons = 0x0F;
+	bus->input_state  = 0xFF;
 
-	bus_write(bus, IO_P1, 0x0F);
+	bus_write(bus, IO_P1, 0x30);
 
 	bus_write(bus, IO_LCDC, 0x91);
 	bus_write(bus, IO_BGP , 0xFC);

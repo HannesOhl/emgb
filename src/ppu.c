@@ -41,12 +41,6 @@ void ppu_init(Ppu* ppu, Bus* bus, uint32_t* buffer) {
 	ppu->dots   = 0;
 }
 
-void interrupt_send(Bus* bus, uint8_t n) {
-	uint8_t flag = bus_read(bus, IO_IF);
-	flag |= (1 << n);
-	bus_write(bus, IO_IF, flag);
-}
-
 static inline uint8_t set_stat_mode(uint8_t stat, uint8_t mode) {
 	return ((stat & (uint8_t) ~0x03) | (mode & 0x03));
 }
