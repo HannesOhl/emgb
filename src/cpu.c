@@ -755,6 +755,20 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 		return 8;
 	}
 
+	// (post boot rom) SUB (HL)
+	case 0x96: {
+    		uint8_t data = bus_read(bus, reg->hl);
+    		uint8_t res = reg->a - data;
+
+    		flag_con(reg, FLAG_Z, res == 0);
+    		flag_con(reg, FLAG_N, 1);
+		flag_con(reg, FLAG_H, (reg->a & 0x0F) < (data & 0x0F));
+		flag_con(reg, FLAG_C, reg->a < data);
+
+		reg->a = res;
+		return 8;
+	}
+
 	// (post boot rom) ADC (HL)
 
 	// SUB r

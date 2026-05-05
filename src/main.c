@@ -24,8 +24,8 @@ void joypad_handle(Bus* bus, SDL_Keycode key, bool pressed) {
 	switch(key) {
 	case SDLK_RIGHT:  mask = (uint8_t) BUTTON_RIGHT; break;
 	case SDLK_LEFT:   mask = (uint8_t) BUTTON_LEFT;  break;
-	case SDLK_UP:     mask = (uint8_t) BUTTON_RIGHT; break;
-	case SDLK_DOWN:   mask = (uint8_t) BUTTON_LEFT;  break;
+	case SDLK_UP:     mask = (uint8_t) BUTTON_UP; break;
+	case SDLK_DOWN:   mask = (uint8_t) BUTTON_DOWN;  break;
 	case SDLK_y:      mask = (uint8_t) BUTTON_A;     break;
 	case SDLK_x:      mask = (uint8_t) BUTTON_B;     break;
 	case SDLK_RETURN: mask = (uint8_t) BUTTON_START; break;
