@@ -2,3 +2,4 @@
 - LY should be owned by ppu, so maybe put it in ppu struct and handly writes to IO_LY
 	accordingly
 - interrupt handling for input
+- ROM banking!
