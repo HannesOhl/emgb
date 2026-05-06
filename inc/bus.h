@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #define HW_REG_IE 0xFFFF
 #define HW_REG_IF 0xFF0F
