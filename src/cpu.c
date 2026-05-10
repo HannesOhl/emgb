@@ -52,14 +52,25 @@ void cpu_state_print(Cpu* cpu) {
 	printf("\n");
 }
 
-void cpu_init(Cpu* cpu) {
+void cpu_init(Cpu* cpu, Bus* bus) {
 
 	cpu->ime      	   = false;
 	cpu->ime_scheduled = false;
 	cpu->halted 	   = false;
 	cpu->stopped 	   = false;
 	cpu->halt_bug	   = false;
-	cpu->reg.pc  	   = 0x0000;
+
+	cpu->reg.af = 0x01B0;
+	cpu->reg.bc = 0x0013;
+	cpu->reg.de = 0x00D8;
+	cpu->reg.hl = 0x014D;
+
+	if (bus->b_enabled) {
+		cpu->reg.pc = 0x0000;
+	} else {
+		cpu->reg.pc = 0x0100;
+		cpu->reg.sp = 0xFFFE;
+	}
 }
 
 static uint8_t cb_register_get(Bus* bus, Registers* reg, uint8_t r) {

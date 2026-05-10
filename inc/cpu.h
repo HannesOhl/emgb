@@ -58,7 +58,7 @@ typedef struct {
 
 void stack_print(Cpu* cpu, Bus* bus);
 void cpu_state_print(Cpu* cpu);
-void cpu_init(Cpu* cpu);
+void cpu_init(Cpu* cpu, Bus* bus);
 uint32_t cpu_step(Cpu* cpu, Bus* mem);
 #endif
 

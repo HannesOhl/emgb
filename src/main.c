@@ -67,23 +67,22 @@ int main(int argc, char** argv) {
 	if (argc < 2) die("Usage: %s rom.gb\n", pname);
 
 	FILE* rom_b = fopen("./dmg_boot.bin", "rb");
-	if (!rom_b) die("Error opening Boot ROM.\n");
+	if (!rom_b) printf("[INFO]: No boot-rom found. Skipping it.\n");
 
 	FILE* rom = fopen(argv[1], "rb");
-	if (!rom) die("Error opening ROM.\n");
+	if (!rom) printf("[ERROR]: Unable to open ROM.\n");
 
 	Bus bus = {0};
 	bus_init(&bus, rom_b, rom);
 	fclose(rom);
-	fclose(rom_b);
+	if (rom_b) fclose(rom_b);
 
 	Cpu cpu = {0};
-	cpu_init(&cpu);
+	cpu_init(&cpu, &bus);
 
 	SDLContext* ctx = calloc((size_t) 1, (size_t) sizeof *ctx);
 	context_sdl_init(ctx);
 	uint32_t* buffer = ctx->surface->pixels;
-	(void) buffer;
 
 	Ppu ppu = {0};
 	ppu_init(&ppu, &bus, buffer);
@@ -93,7 +92,6 @@ int main(int argc, char** argv) {
 
 	bool running = true;
 	while (running) {
-		//if (!bus.b_enabled) die("turned of dmg rom.\n");
 
 		while (SDL_PollEvent(&ctx->event) != 0) {
 			input_handle(&bus, &ctx->event, &running);
@@ -102,7 +100,6 @@ int main(int argc, char** argv) {
 		uint32_t cycles = cpu_step(&cpu, &bus);
 		ppu_step(&ppu, ctx, cycles);
 		tmr_step(&tmr, &bus, cycles);
-		//stack_print(&cpu, &bus);
 	}
 
 	context_sdl_destroy(ctx);

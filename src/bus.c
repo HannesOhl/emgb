@@ -100,10 +100,13 @@ void bus_init(Bus* bus, FILE* rom_b, FILE* rom) {
 	}
 
 	size_t ret = fread(bus->c_rom, 1, MAX_ROM_SIZE, rom);
-	ret = fread(bus->b_rom, 1, 256, rom_b);
+	if (rom_b) {
+		ret = fread(bus->b_rom, 1, 256, rom_b);
+		bus->b_enabled = true;
+	} else {
+		bus->b_enabled = false;
+	}
 	(void) ret;
-
-	bus->b_enabled = true;
 
 	bus->input_state  = 0xFF;
 
