@@ -96,7 +96,7 @@ void bus_init(Bus* bus, FILE* rom_b, FILE* rom) {
 
 	bus->c_rom = calloc((size_t) MAX_ROM_SIZE, sizeof *bus->c_rom);
 	if (!bus->c_rom) {
-		die("Error allocating busory for ROM.\n");
+		die("Error allocating memory for ROM.\n");
 	}
 
 	size_t ret = fread(bus->c_rom, 1, MAX_ROM_SIZE, rom);
