@@ -2,23 +2,18 @@
 #define PPU_H
 
 #include "./bus.h"
-#include "./backend_sdl.h"
+#include "./backend.h"
 
 #include <stdint.h>
 
-#define SCREEN_WIDTH 160
-#define SCREEN_HEIGHT 144
-
 typedef struct {
-	Bus* bus;
-
 	uint32_t dots;
 	uint8_t window_line;
 	uint32_t* pixels;
 } Ppu;
 
-void ppu_init(Ppu* ppu, Bus* bus, uint32_t* pixels);
-void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycels);
+bool ppu_init(Ppu* ppu);
+void ppu_step(Ppu* ppu, Bus* bus, EXTBackendContext* ctx, uint32_t cycles);
 
 #endif
 

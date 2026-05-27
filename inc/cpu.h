@@ -38,27 +38,19 @@ typedef struct {
 	uint16_t pc;
 } Registers;
 
-typedef enum {
-	FLAG_C = (1 << 4),
-	FLAG_H = (1 << 5),
-	FLAG_N = (1 << 6),
-	FLAG_Z = (1 << 7)
-} Flag;
-
 typedef struct {
+
 	Registers reg;
+
 	bool ime;
 	bool ime_scheduled;
 	bool halted;
 	bool halt_bug;
 	bool stopped;
-
-	uint64_t cycles;
 } Cpu;
 
-void stack_print(Cpu* cpu, Bus* bus);
-void cpu_state_print(Cpu* cpu);
-void cpu_init(Cpu* cpu, Bus* bus);
-uint32_t cpu_step(Cpu* cpu, Bus* mem);
+bool cpu_init(Cpu* cpu, Bus* bus);
+uint32_t cpu_step(Cpu* cpu, Bus* bus);
+
 #endif
 

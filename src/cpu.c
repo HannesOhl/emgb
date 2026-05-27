@@ -1,64 +1,93 @@
-// TODO: maybe use _Generic to treat opcodes for (HL) different!
-
 #include "../inc/cpu.h"
 
-#include "../inc/util.h"
+#include "../inc/bus.h"
+
+// for exit(), debug only, remove later
+#include <stdlib.h>
+
+// ============ flags ===============
+typedef enum {
+	FLAG_C = (1 << 4),
+	FLAG_H = (1 << 5),
+	FLAG_N = (1 << 6),
+	FLAG_Z = (1 << 7)
+} Flag;
 
 static void flag_set(Registers* reg, Flag f) {
 	reg->f |= (uint8_t) f;
 	reg->f &= 0xF0;
 }
+
 static void flag_clr(Registers* reg, Flag f) {
 	reg->f &= (uint8_t) ~f;
 	reg->f &= 0xF0;
 }
+
 static void flag_con(Registers* reg, Flag f, bool cond) {
 	reg->f = cond ? (reg->f | (uint8_t) f) : (reg->f & (uint8_t) ~f);
 	reg->f &= 0xF0;
 }
+
 static bool flag_check(Registers* reg, Flag f) {
 	return ( (reg->f & (uint8_t) f) != 0 );
 }
 
-void stack_print(Cpu* cpu, Bus* bus) {
+// =========== interrupt handling ===============================
+static void interrupt_handle(Cpu* cpu, Bus* bus, bool* occured) {
 
 	Registers* reg = &cpu->reg;
 
-	printf("stack (SP=0x%04X):\n", reg->sp);
-
-	uint16_t addr = reg->sp;
-	while (addr + 1 <= 0xFFFE) {
-		uint8_t lsb = bus_read(bus, addr++);
-		uint8_t msb = bus_read(bus, addr++);
-		uint16_t word = u16(lsb, msb);
-
-		printf("\t0x%04X: 0x%04X", addr, word);
+	uint8_t hw_ie = bus_read(bus, REG_IE);
+	uint8_t hw_if = bus_read(bus, REG_IF);
+	uint8_t requested = hw_ie & hw_if & 0x1F;
+	if (!requested) {
+		*occured = false;
+		return;
 	}
-	printf("\n");
+
+	cpu->ime = false;
+	cpu->ime_scheduled = false;
+
+	uint8_t v = 0;
+	for (size_t i = 0; i < 5; i++) {
+		if (requested & (1 << i)) {
+			uint8_t r = bus_read(bus, REG_IF);
+			bus_write(bus, REG_IF, r &= (uint8_t) ~(1 << i));
+			v = (uint8_t) ((uint8_t) 0x40 + (uint8_t) i * (uint8_t) 0x08);
+			break;
+		}
+	}
+
+	reg->sp -= 2;
+
+	// write hi first
+	bus_write(bus, reg->sp + 1, (uint8_t) (reg->pc >> 8));
+	bus_write(bus, reg->sp    , (uint8_t) (reg->pc & 0xFF));
+	reg->pc = v;
+	*occured = true;
 }
 
-void cpu_state_print(Cpu* cpu) {
-
-	Registers* reg = &cpu->reg;
-
-	printf("cpu state:\n");
-	printf("cycles = %lu\n", cpu->cycles);
-
-	printf("A = %02X, F = %02X\n", reg->a, reg->f);
-	printf("B = %02X, C = %02X\n", reg->b, reg->c);
-	printf("D = %02X, E = %02X\n", reg->d, reg->e);
-	printf("H = %02X, L = %02X\n", reg->h, reg->l);
-	printf("SP = %04X\n", reg->sp);
-	printf("\n");
+// =========== helpers ======================
+static inline uint16_t u16(uint8_t lsb, uint8_t msb) {
+	return lsb | (msb << 8);
 }
 
-void cpu_init(Cpu* cpu, Bus* bus) {
+static inline uint8_t lsb_make(uint16_t value) {
+	return (uint8_t) (value & 0x00FF);
+}
+
+static inline uint8_t msb_make(uint16_t value) {
+	return (uint8_t) (value >> 8);
+}
+
+// =========== cpu =================
+bool cpu_init(Cpu* cpu, Bus* bus) {
 
 	cpu->ime      	   = false;
 	cpu->ime_scheduled = false;
 	cpu->halted 	   = false;
-	cpu->stopped 	   = false;
 	cpu->halt_bug	   = false;
+	cpu->stopped 	   = false;
 
 	cpu->reg.af = 0x01B0;
 	cpu->reg.bc = 0x0013;
@@ -71,12 +100,13 @@ void cpu_init(Cpu* cpu, Bus* bus) {
 		cpu->reg.pc = 0x0100;
 		cpu->reg.sp = 0xFFFE;
 	}
+
+	return true;
 }
 
 static uint8_t cb_register_get(Bus* bus, Registers* reg, uint8_t r) {
 
 	switch (r) {
-
 	case 0: return reg->b;
 	case 1: return reg->c;
 	case 2: return reg->d;
@@ -85,9 +115,7 @@ static uint8_t cb_register_get(Bus* bus, Registers* reg, uint8_t r) {
 	case 5: return reg->l;
 	case 6: return bus_read(bus, reg->hl);
 	case 7: return reg->a;
-
-	default: die("invalid branch in r_get_execute\n!"); return 0;
-
+	default: {} return 0;
 	}
 }
 
@@ -103,19 +131,18 @@ static void cb_register_set(Bus* bus, Registers* reg, uint8_t r, uint8_t val) {
 	case 5: reg->l = val; return;
 	case 6: bus_write(bus, reg->hl, val); return;
 	case 7: reg->a = val; return;
-
-	default: die("invalid branch in r_get_execute\n!"); break;
+	default: {}; break;
 
 	}
 }
 
-uint8_t rlc(Registers* reg, uint8_t r_val) {
-	die("rlc.\n"); (void) reg;
+static uint8_t rlc(Registers* reg, uint8_t r_val) {
+	fprintf(stderr, "rlc.\n"); exit(1); (void) reg;
 	(void) r_val; return 0; }
-uint8_t rrc(Registers* reg, uint8_t r_val) {
-	die("rrc.\n"); (void) reg;
+static uint8_t rrc(Registers* reg, uint8_t r_val) {
+	fprintf(stderr, "rrc.\n"); exit(1); (void) reg;
 	(void) r_val; return 0; }
-uint8_t rl (Registers* reg, uint8_t r_val) {
+static uint8_t rl (Registers* reg, uint8_t r_val) {
 	uint8_t c_in   = flag_check(reg, FLAG_C);
 	uint8_t c_out  = r_val >> 7;
 	uint8_t result = (r_val << 1) | c_in;
@@ -125,11 +152,11 @@ uint8_t rl (Registers* reg, uint8_t r_val) {
 	flag_clr(reg, FLAG_H);
 	return result;
 }
-uint8_t rr (Registers* reg, uint8_t r_val) {
-	die("rr .\n"); (void) reg;
+static uint8_t rr (Registers* reg, uint8_t r_val) {
+	fprintf(stderr, "rr .\n"); exit(1); (void) reg;
 	(void) r_val; return 0; }
 
-uint8_t sla(Registers* reg, uint8_t r_val) {
+static uint8_t sla(Registers* reg, uint8_t r_val) {
 	flag_con(reg, FLAG_C, r_val >> 7);
 	uint8_t res = r_val << 1;
 	flag_con(reg, FLAG_Z, res == 0 );
@@ -138,10 +165,10 @@ uint8_t sla(Registers* reg, uint8_t r_val) {
 	return res;
 }
 
-uint8_t sra(Registers* reg, uint8_t r_val) {
-	die("sra.\n"); (void) reg;
+static uint8_t sra(Registers* reg, uint8_t r_val) {
+	fprintf(stderr, "sra.\n"); exit(1); (void) reg;
 	(void) r_val; return 0; }
-uint8_t swp(Registers* reg, uint8_t r_val) {
+static uint8_t swp(Registers* reg, uint8_t r_val) {
 
 	uint8_t res = (r_val >> 4) | (r_val << 4);
 	flag_con(reg, FLAG_Z, res == 0);
@@ -151,7 +178,7 @@ uint8_t swp(Registers* reg, uint8_t r_val) {
 	return res;
 }
 
-uint8_t srl(Registers* reg, uint8_t r_val) {
+static uint8_t srl(Registers* reg, uint8_t r_val) {
 	flag_con(reg, FLAG_C, r_val & 1);
 	uint8_t res = r_val >> 1;
 	flag_con(reg, FLAG_Z , res == 0);
@@ -190,7 +217,7 @@ static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 		case 5: r_val = sra(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
 		case 6: r_val = swp(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
 		case 7: r_val = srl(reg, r_val); cb_register_set(bus, reg, r, r_val); break;
-		default: die("invalid branch in cb_execute, case 0!\n");
+		default: {}; break;
 		}
 		return cycles;
 	}
@@ -212,7 +239,7 @@ static uint32_t cb_execute(Bus* bus, Registers* reg, uint8_t opcode) {
 		return cycles;
 
 	default:
-		die("Instruction 0xCB 0x%hhX not implemented.\n", opcode);
+		fprintf(stderr, "Instruction 0xCB 0x%hhX not implemented.\n", opcode); exit(2);
 		return 0;
 	}
 }
@@ -226,7 +253,7 @@ static uint8_t add_r(Registers* reg, uint8_t r_val) {
 	return res;
 }
 
-uint8_t adc_r(Registers* reg, uint8_t r_val) {
+static uint8_t adc_r(Registers* reg, uint8_t r_val) {
 	uint16_t c = flag_check(reg, FLAG_C) ? 1 : 0;
 	uint16_t res = (uint16_t) ((uint16_t) reg->a + (uint16_t) r_val + c);
 	flag_con(reg, FLAG_Z, ((res & 0xFF) == 0));
@@ -317,40 +344,6 @@ static uint8_t sub_r(Registers* reg, uint8_t r_val) {
 	return res;
 }
 
-static void interrupt_handle(Cpu* cpu, Bus* bus, bool* occured) {
-
-	Registers* reg = &cpu->reg;
-
-	uint8_t hw_ie = bus_read(bus, HW_REG_IE);
-	uint8_t hw_if = bus_read(bus, HW_REG_IF);
-	uint8_t requested = hw_ie & hw_if & 0x1F;
-	if (!requested) {
-		*occured = false;
-		return;
-	}
-
-	cpu->ime = false;
-	cpu->ime_scheduled = false;
-
-	uint8_t v = 0;
-	for (size_t i = 0; i < 5; i++) {
-		if (requested & (1 << i)) {
-			uint8_t r = bus_read(bus, HW_REG_IF);
-			bus_write(bus, HW_REG_IF, r &= (uint8_t) ~(1 << i));
-			v = (uint8_t) ((uint8_t) 0x40 + (uint8_t) i * (uint8_t) 0x08);
-			break;
-		}
-	}
-
-	reg->sp -= 2;
-	// Write hi first (hardware behaviour for push: SP-1 = hi, SP-2 = lo)
-	bus_write(bus, reg->sp + 1, (uint8_t) (reg->pc >> 8));
-	bus_write(bus, reg->sp    , (uint8_t) (reg->pc & 0xFF));
-	reg->pc = v;
-	*occured = true;
-}
-
-
 uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	Registers* reg = &cpu->reg;
@@ -359,11 +352,11 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	// handle STOP state
 	if (cpu->stopped) {
-		uint8_t r = bus_read(bus, HW_REG_IF);
+		uint8_t r = bus_read(bus, REG_IF);
 		bool interrupt_flag = r & 0b00010000;
 		if (interrupt_flag) {
 			cpu->stopped = false;
-			bus_write(bus, HW_REG_IF, r &= (uint8_t) ~0b00010000);
+			bus_write(bus, REG_IF, r &= (uint8_t) ~0b00010000);
 		} else {
 			return 4;
 		}
@@ -371,8 +364,8 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 
 	// handle HALT state
 	if (cpu->halted) {
-		uint8_t hw_ie = bus_read(bus, HW_REG_IE);
-		uint8_t hw_if = bus_read(bus, HW_REG_IF);
+		uint8_t hw_ie = bus_read(bus, REG_IE);
+		uint8_t hw_if = bus_read(bus, REG_IF);
 		uint8_t requested = hw_ie & hw_if & 0x1F;
 		if (!requested) {
 			return 4;
@@ -406,7 +399,6 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	} else {
 		opcode = bus_read(bus, reg->pc++);
 	}
-	//printf("executing opcode %02X\n", opcode);
 
 	if (ei_delay) {
 		cpu->ime = true;
@@ -602,10 +594,38 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	}
 
 	// LD rr, nn 4/4
+	/*
 	case 0x01: reg->bc = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	case 0x11: reg->de = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	case 0x21: reg->hl = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
 	case 0x31: reg->sp = bus_read_16(bus, reg->pc); reg->pc += 2; return 12;
+	*/
+
+	// LD rr, nn 4/4
+	case 0x01: {
+		   uint8_t lsb = bus_read(bus, reg->pc++);
+		   uint8_t msb = bus_read(bus, reg->pc++);
+		   reg->bc = u16(lsb, msb);
+		   return 12;
+	}
+	case 0x11: {
+		   uint8_t lsb = bus_read(bus, reg->pc++);
+		   uint8_t msb = bus_read(bus, reg->pc++);
+		   reg->de = u16(lsb, msb);
+		   return 12;
+	}
+	case 0x21: {
+		   uint8_t lsb = bus_read(bus, reg->pc++);
+		   uint8_t msb = bus_read(bus, reg->pc++);
+		   reg->hl = u16(lsb, msb);
+		   return 12;
+	}
+	case 0x31: {
+		   uint8_t lsb = bus_read(bus, reg->pc++);
+		   uint8_t msb = bus_read(bus, reg->pc++);
+		   reg->sp = u16(lsb, msb);
+		   return 12;
+	}
 
 	// LD (HL+), A
 	case 0x22: bus_write(bus, reg->hl++, reg->a); return 8;
@@ -1238,7 +1258,7 @@ uint32_t cpu_step(Cpu* cpu, Bus* bus) {
 	}
 
 	default:
-		die("Instruction 0x%02X not implemented.\n", opcode);
+		fprintf(stderr, "Instruction 0x%02X not implemented.\n", opcode); exit(3);
 		return 0;
 	}
 }

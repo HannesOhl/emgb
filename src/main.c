@@ -1,111 +1,150 @@
-#include "../inc/backend_sdl.h"
-#include "../inc/cpu.h"
+// TODO: add ctx to emu struct
+#include "../inc/main.h"
+
+// core
 #include "../inc/bus.h"
+#include "../inc/cpu.h"
 #include "../inc/ppu.h"
-#include "../inc/timer.h"
-#include "../inc/util.h"
+#include "../inc/tmr.h"
+#include "../inc/backend.h"
 
-static char* pname;
+#include <stdio.h>
+#include <errno.h>
 
-#define BUTTON_A        0x10
-#define BUTTON_B        0x20
-#define BUTTON_SELECT   0x40
-#define BUTTON_START    0x80
-#define BUTTON_RIGHT    0x01
-#define BUTTON_LEFT     0x02
-#define BUTTON_UP       0x04
-#define BUTTON_DOWN     0x08
+// for getopt()
+#include <unistd.h>
 
-void joypad_handle(Bus* bus, SDL_Keycode key, bool pressed) {
+// for die()
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
 
 
-	uint8_t mask = 0;
+void die(const char* fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	if (fmt) vfprintf(stderr, fmt, ap);
+	if (!fmt) fprintf(stderr, "Unknown error.\n");
+	va_end(ap);
 
-	switch(key) {
-	case SDLK_RIGHT:  mask = (uint8_t) BUTTON_RIGHT; break;
-	case SDLK_LEFT:   mask = (uint8_t) BUTTON_LEFT;  break;
-	case SDLK_UP:     mask = (uint8_t) BUTTON_UP; break;
-	case SDLK_DOWN:   mask = (uint8_t) BUTTON_DOWN;  break;
-	case SDLK_y:      mask = (uint8_t) BUTTON_A;     break;
-	case SDLK_x:      mask = (uint8_t) BUTTON_B;     break;
-	case SDLK_RETURN: mask = (uint8_t) BUTTON_START; break;
-	case SDLK_RCTRL:  mask = (uint8_t) BUTTON_SELECT; break;
-	default: break;
+	if (fmt && fmt[0] && fmt[strlen(fmt)-1] == ':') {
+		fputc(' ', stderr);
+		perror(NULL);
 	}
 
-	if (pressed) {
-		bus->input_state &= ~mask;
-	} else {
-		bus->input_state |=  mask;
-	}
+	exit(EXIT_FAILURE);
 }
 
-void input_handle(Bus* bus, SDL_Event* e, bool* running) {
+void help_print(char** argv) {
 
-	switch (e->type) {
+	die("Usage: %s ... \n", argv[0]);
+}
 
-	case SDL_KEYDOWN: {
-		if (e->key.keysym.sym == SDLK_ESCAPE) {
-			*running = false;
-			return;
-		}
-		joypad_handle(bus, e->key.keysym.sym, true);
-	} break;
+bool emu_init(Emulator* emu, FILE* rom_boot, FILE* rom_game) {
 
-	case SDL_KEYUP: {
-		joypad_handle(bus, e->key.keysym.sym, false);
-	} break;
-
-	default: break;
-
+	emu->bus = calloc((size_t) 1, sizeof *emu->bus);
+	if (!emu->bus) {
+		fprintf(stderr, "[ERROR]: Memory allocation for bus failed.\n");
+		return false;
 	}
+	if (!bus_init(emu->bus, rom_boot, rom_game)) {
+		return false;
+	}
+
+	emu->cpu = calloc((size_t) 1, sizeof *emu->cpu);
+	if (!emu->cpu) {
+		fprintf(stderr, "[ERROR]: Memory allocation for cpu failed.\n");
+		return false;
+	}
+	if (!cpu_init(emu->cpu, emu->bus)) {
+		return false;
+	}
+
+	emu->ppu = calloc((size_t) 1, sizeof *emu->ppu);
+	if (!emu->ppu) {
+		fprintf(stderr, "[ERROR]: Memory allocation for ppu failed.\n");
+		return false;
+	}
+	if (!ppu_init(emu->ppu)) {
+		return false;
+	}
+
+	emu->tmr = calloc((size_t) 1, sizeof *emu->tmr);
+	if (!emu->tmr) {
+		fprintf(stderr, "[ERROR]: Memory allocation for tmr failed.\n");
+		return false;
+	}
+	tmr_init(emu->tmr, emu->bus);
+
+	return true;
 }
 
 int main(int argc, char** argv) {
 
-	pname = argv[0];
-	if (argc < 2) die("Usage: %s rom.gb\n", pname);
+	int opt;
+	while ((opt = getopt(argc, argv, "h")) != -1) {
 
-	FILE* rom_b = fopen("./dmg_boot.bin", "rb");
-	if (!rom_b) printf("[INFO]: No boot-rom found. Skipping it.\n");
-
-	FILE* rom = fopen(argv[1], "rb");
-	if (!rom) printf("[ERROR]: Unable to open ROM.\n");
-
-	Bus bus = {0};
-	bus_init(&bus, rom_b, rom);
-	fclose(rom);
-	if (rom_b) fclose(rom_b);
-
-	Cpu cpu = {0};
-	cpu_init(&cpu, &bus);
-
-	SDLContext* ctx = calloc((size_t) 1, (size_t) sizeof *ctx);
-	context_sdl_init(ctx);
-	uint32_t* buffer = ctx->surface->pixels;
-
-	Ppu ppu = {0};
-	ppu_init(&ppu, &bus, buffer);
-
-	Tmr tmr = {0};
-	tmr_init(&tmr, &bus);
-
-	bool running = true;
-	while (running) {
-
-		while (SDL_PollEvent(&ctx->event) != 0) {
-			input_handle(&bus, &ctx->event, &running);
+		switch (opt) {
+		case 'h':
+			help_print(argv);
+			break;
+		default:
+			break;
 		}
-
-		uint32_t cycles = cpu_step(&cpu, &bus);
-		ppu_step(&ppu, ctx, cycles);
-		tmr_step(&tmr, &bus, cycles);
 	}
 
-	context_sdl_destroy(ctx);
-	SDL_Quit();
-	free(bus.c_rom);
+	FILE* rom_boot = NULL;
+	FILE* rom_game = NULL;
 
+	// decl. and init. this here: gcc -Wmaybe-uninitialised false pos.
+	Emulator emu = {0};
+	EXTBackendContext* ctx = NULL;
+
+	// open rom passed as command line argument
+	if (argc == 2) {
+		rom_boot = fopen("./roms/dmg_boot.bin", "rb");
+		if (!rom_boot) {
+			printf("[INFO]: No boot-rom found. We skip it.\n");
+		}
+
+		rom_game = fopen(argv[1], "rb");
+		if (!rom_game) {
+			fprintf(stderr, "[ERROR]: Can't open %s: %s\n", argv[1], strerror(errno));
+			goto cleanup;
+		}
+
+		if (!emu_init(&emu, rom_boot, rom_game)) goto cleanup;
+
+		ctx = EXT_backend_init(emu.ppu->pixels);
+
+		bool running = true;
+		while (running) {
+
+			// input handling
+			InputEvent event = {0};
+			if (EXT_backend_input(ctx, &event)) {
+				input_handle(emu.bus, event.key, event.pressed, &running);
+			}
+
+			// stepping
+			uint32_t cycles = cpu_step(emu.cpu, emu.bus);
+			ppu_step(emu.ppu, emu.bus, ctx, cycles);
+			tmr_step(emu.tmr, emu.bus, cycles);
+
+		}
+	} else {
+		help_print(argv);
+	}
+
+cleanup:
+	if (rom_boot) fclose(rom_boot);
+	if (rom_game) fclose(rom_game);
+	free(emu.tmr);
+	free(emu.ppu->pixels);
+	free(emu.ppu);
+	free(emu.cpu);
+	free(emu.bus);
+	EXT_backend_destroy(ctx);
 	return 0;
 }
 

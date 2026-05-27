@@ -1,7 +1,9 @@
 #include "../inc/ppu.h"
 
-#include "../inc/util.h"
-#include "../inc/backend_sdl.h"
+// for calloc
+#include <stdlib.h>
+// for size_t
+#include <stddef.h>
 
 #define LCDC_ENABLE 			0x80
 #define LCDC_BACKGROUND_ENABLE 		0x01
@@ -22,8 +24,21 @@
 #define LINE_END        455
 #define VISIBLE_LINES   144
 #define TOTAL_LINES     154
+#define OAM_SIZE 	160
 
-#define OAM_SIZE 160
+static const uint32_t SCREEN_WIDTH  = 160;
+static const uint32_t SCREEN_HEIGHT = 144;
+static const uint32_t PIXELS_NUMBER = SCREEN_WIDTH*SCREEN_HEIGHT;
+
+
+bool ppu_init(Ppu* ppu) {
+
+	ppu->dots = 0;
+	ppu->pixels = calloc((size_t) PIXELS_NUMBER, sizeof *ppu->pixels);
+
+	return true;
+}
+
 static bool line_rendered = false;
 
 static uint32_t bw_palette[4] = {
@@ -32,13 +47,6 @@ static uint32_t bw_palette[4] = {
 
 static inline uint32_t palette_color(uint8_t shade) {
     return bw_palette[shade & 3];
-}
-
-void ppu_init(Ppu* ppu, Bus* bus, uint32_t* buffer) {
-
-	ppu->bus    = bus;
-	ppu->pixels = buffer;
-	ppu->dots   = 0;
 }
 
 static inline uint8_t set_stat_mode(uint8_t stat, uint8_t mode) {
@@ -54,11 +62,9 @@ static inline uint16_t tile_data_addr(uint8_t lcdc, uint8_t tile_index) {
     	return (uint16_t) (0x9000 + (int16_t) ((int8_t) tile_index * 16));
 }
 
-static uint8_t pixel_index(Ppu *ppu, uint16_t base, uint16_t sx, uint16_t sy) {
+static uint8_t pixel_index(Bus* bus, uint16_t base, uint16_t sx, uint16_t sy) {
 
-	Bus* bus = ppu->bus;
-
-	uint8_t lcdc = bus_read(bus, IO_LCDC);
+	uint8_t lcdc = bus_read(bus, REG_LCDC);
 
 	// wrap to 8-bit BG/window space
 	uint8_t x = (uint8_t) sx;
@@ -86,23 +92,21 @@ static uint8_t pixel_index(Ppu *ppu, uint16_t base, uint16_t sx, uint16_t sy) {
 	return pixel_index;
 }
 
-void line_render(Ppu* ppu, uint8_t ly) {
+void line_render(Ppu* ppu, Bus* bus, uint8_t ly) {
 
-	Bus* bus = ppu->bus;
-
-	uint8_t lcdc = bus_read(bus, IO_LCDC);
-	uint8_t bgp  = bus_read(bus, IO_BGP);
+	uint8_t lcdc = bus_read(bus, REG_LCDC);
+	uint8_t bgp  = bus_read(bus, REG_BGP);
 
 	uint8_t line_bg_indices[SCREEN_WIDTH];
 
 	// for background
-	uint8_t scx = bus_read(bus, IO_SCX);
-	uint8_t scy = bus_read(bus, IO_SCY);
+	uint8_t scx = bus_read(bus, REG_SCX);
+	uint8_t scy = bus_read(bus, REG_SCY);
 	uint16_t base_b = (lcdc & (1 << 3)) ? 0x9C00 : 0x9800;
 
 	// for window
-	uint8_t wy = bus_read(bus, IO_WY);
-	uint8_t wx = bus_read(bus, IO_WX);
+	uint8_t wy = bus_read(bus, REG_WY);
+	uint8_t wx = bus_read(bus, REG_WX);
 	int16_t wx_origin = (int16_t) wx - 7;
 	uint16_t base_w = (lcdc & (1 << 6)) ? 0x9C00 : 0x9800;
 
@@ -112,12 +116,12 @@ void line_render(Ppu* ppu, uint8_t ly) {
 		uint8_t color_index = 0;
 
 		if (lcdc & LCDC_BACKGROUND_ENABLE) {
-			color_index = pixel_index(ppu, base_b, (uint16_t) (x + scx), (uint16_t) (ly + scy));
+			color_index = pixel_index(bus, base_b, (uint16_t) (x + scx), (uint16_t) (ly + scy));
 		}
 
 		// override bg
         	if (w && (int16_t) x >= wx_origin) {
-			color_index = pixel_index(ppu, base_w, (uint16_t) ((int16_t) x - wx_origin), ppu->window_line);
+			color_index = pixel_index(bus, base_w, (uint16_t) ((int16_t) x - wx_origin), ppu->window_line);
         	}
 		line_bg_indices[x] = color_index;
         	ppu->pixels[x + ly * SCREEN_WIDTH] = palette_color(shade_from_palette(bgp, color_index));
@@ -191,7 +195,7 @@ void line_render(Ppu* ppu, uint8_t ly) {
 		uint8_t low  = bus_read(bus, (uint16_t) (tile_addr + (uint16_t) (row * 2)));
 		uint8_t high = bus_read(bus, (uint16_t) (tile_addr + (uint16_t) (row * 2) + 1));
 
-		uint8_t palette = (flags & 0x10) ? bus_read(bus, IO_OBP1) : bus_read(bus, IO_OBP0);
+		uint8_t palette = (flags & 0x10) ? bus_read(bus, REG_OBP1) : bus_read(bus, REG_OBP0);
 		bool behind_bg = (flags & 0x80) != 0;
 		bool xflip = (flags & 0x20) != 0;
 
@@ -212,43 +216,42 @@ void line_render(Ppu* ppu, uint8_t ly) {
 			}
 
 			uint8_t shade = shade_from_palette(palette, color_index);
-			ppu->pixels[(ly * SCREEN_WIDTH) + (uint32_t) screen_x] = palette_color(shade);
+			ppu->pixels[(ly * (uint32_t) SCREEN_WIDTH) + (uint32_t) screen_x] = palette_color(shade);
 		}
 	}
 	line_rendered = true;
 }
 
-void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycles) {
+void ppu_step(Ppu* ppu, Bus* bus, EXTBackendContext* ctx, uint32_t cycles) {
 
-	Bus* bus = ppu->bus;
-	uint8_t lcdc = bus_read(bus, IO_LCDC);
+	uint8_t lcdc = bus_read(bus, REG_LCDC);
 
 	if (!(lcdc & LCDC_ENABLE)) {
 		ppu->dots = 0;
 		ppu->window_line = 0;
-		bus_write(bus, IO_LY, 0x00);
+		bus_write(bus, REG_LY, 0x00);
 		return;
 	}
 
 	ppu->dots += cycles;
 
 	// handle OAM DMA transfers if ongoing
-	uint8_t dma = bus_read(bus, IO_DMA);
+	uint8_t dma = bus_read(bus, REG_DMA);
 	if (dma != 0) {
 		uint16_t dma_src_addr = dma << 8;
 		for (size_t i = 0; i < OAM_SIZE; i++) {
 			uint8_t dma_src = bus_read(bus, dma_src_addr + (uint16_t) i);
 			bus_write(bus, 0xFE00 + (uint16_t) i, dma_src);
 		}
-		bus_write(bus, IO_DMA, 0x00);
+		bus_write(bus, REG_DMA, 0x00);
 	}
 
-	uint8_t mode = bus_read(bus, IO_STAT) & 0x03;
+	uint8_t mode = bus_read(bus, REG_STAT) & 0x03;
 
 	// local hw regs, write back later
-	uint8_t ly = bus_read(bus, IO_LY);
-	uint8_t lyc = bus_read(bus, IO_LYC);
-	uint8_t stat = bus_read(bus, IO_STAT);
+	uint8_t ly = bus_read(bus, REG_LY);
+	uint8_t lyc = bus_read(bus, REG_LYC);
+	uint8_t stat = bus_read(bus, REG_STAT);
 
 	if (mode == 1) {
 		if (ppu->dots >= SCANLINE_DOTS) {
@@ -269,8 +272,8 @@ void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycles) {
 				stat &= (uint8_t) ~0x04;
 			}
 		}
-		bus_write(bus, IO_LY  , ly);
-		bus_write(bus, IO_STAT, stat);
+		bus_write(bus, REG_LY  , ly);
+		bus_write(bus, REG_STAT, stat);
 		return;
 	}
 
@@ -284,7 +287,7 @@ void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycles) {
 		// mode 3, read OAM and VRAM
 		stat = set_stat_mode(stat, MODE_VRAM);
 
-		if (!line_rendered) line_render(ppu, ly);
+		if (!line_rendered) line_render(ppu, bus, ly);
 
 	} else if (ppu->dots <= LINE_END) {
 		// mode 0, HBlank
@@ -301,7 +304,7 @@ void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycles) {
 		if (ly >= VISIBLE_LINES) {
 			stat = set_stat_mode(stat, MODE_VBLANK);
 			interrupt_send(bus, 0);
-			SDL_UpdateWindowSurface(ctx->window);
+			EXT_backend_present(ctx);
 		} else {
 			stat = set_stat_mode(stat, MODE_OAM);
 			if (mode != 2 && (stat & 0x20)) interrupt_send(bus, 1);
@@ -314,7 +317,7 @@ void ppu_step(Ppu* ppu, SDLContext* ctx, uint32_t cycles) {
 			stat &= (uint8_t) ~0x04;
 		}
 	}
-	bus_write(bus, IO_LY  , ly);
-	bus_write(bus, IO_STAT, stat);
+	bus_write(bus, REG_LY  , ly);
+	bus_write(bus, REG_STAT, stat);
 }
 

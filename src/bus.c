@@ -1,19 +1,17 @@
 #include "../inc/bus.h"
-#include "../inc/util.h"
-
-#include <stdlib.h>
 
 #define MAX_ROM_SIZE 8000000
+#define ROM_BOOT_SIZE 256
 
 void interrupt_send(Bus* bus, uint8_t n) {
-	uint8_t flag = bus_read(bus, IO_IF);
+	uint8_t flag = bus_read(bus, REG_IF);
 	flag |= (1 << n);
-	bus_write(bus, IO_IF, flag);
+	bus_write(bus, REG_IF, flag);
 }
 
 static uint8_t joypad_read(Bus* bus) {
 
-	uint8_t selection = bus->io_ram[IO_P1 - 0xFF00];
+	uint8_t selection = bus->io_ram[REG_P1 - 0xFF00];
 	uint8_t res = 0xC0 | (selection & 0x30) | 0x0F;
 
 	if ((selection & 0x10) == 0) {
@@ -28,9 +26,9 @@ static uint8_t joypad_read(Bus* bus) {
 }
 
 static void joypad_write(Bus* bus, uint8_t val) {
-	uint8_t res = bus_read(bus, IO_P1);
+	uint8_t res = bus_read(bus, REG_P1);
 	res = (res & 0xCF) | (val & 0x30);
-	bus->io_ram[IO_P1 - 0xFF00] = (res & 0xCF) | (val & 0x30);
+	bus->io_ram[REG_P1 - 0xFF00] = (res & 0xCF) | (val & 0x30);
 }
 
 uint8_t bus_read(Bus* bus, uint16_t addr) {
@@ -40,10 +38,9 @@ uint8_t bus_read(Bus* bus, uint16_t addr) {
 			   return bus-> b_rom[addr];
 	}
 
+	if (addr == REG_P1) return joypad_read(bus);
+
 	if (addr < 0x8000) return bus-> c_rom[addr];
-
-	if (addr == IO_P1) return joypad_read(bus);
-
 	if (addr < 0xA000) return bus-> v_ram[addr - 0x8000];
 	if (addr < 0xC000) return bus-> c_ram[addr - 0xA000];
 	if (addr < 0xE000) return bus-> w_ram[addr - 0xC000];
@@ -56,65 +53,61 @@ uint8_t bus_read(Bus* bus, uint16_t addr) {
 	return bus->hi_ram[addr - 0xFF80];
 }
 
-uint16_t bus_read_16(Bus* bus, uint16_t addr) {
-
-	uint8_t lsb = bus_read(bus, addr);
-	uint8_t msb = bus_read(bus, addr + 1);
-
-	return u16(lsb, msb);
-}
-
 void bus_write(Bus* bus, uint16_t addr, uint8_t val) {
 
 	// disable boot rom
-	if (addr == 0xFF50 && val != 0) { bus->b_enabled = false; return; }
+	if (addr == REG_BDIS && val != 0) { bus->b_enabled = false; return; }
 
-	if (addr < 0x8000) { return; }
+	if (addr == REG_P1) { joypad_write(bus, val); return;}
 
+	if (addr == REG_DMA) {
+		uint16_t src = (uint16_t) val << 8;
+		for (int i = 0; i < 0xA0; i++) {
+			bus->oa_ram[i] = bus_read(bus, (uint16_t) (src + i));
+		}
+		return;
+	}
+
+	if (addr < 0x8000) { 					return; }
 	if (addr < 0xA000) { bus-> v_ram[addr - 0x8000] = val;  return; }
 	if (addr < 0xC000) { bus-> c_ram[addr - 0xA000] = val;  return; }
 	if (addr < 0xE000) { bus-> w_ram[addr - 0xC000] = val;  return; }
 	if (addr < 0xFE00) { bus-> w_ram[addr - 0xE000] = val;  return; }
 	if (addr < 0xFEA0) { bus->oa_ram[addr - 0xFE00] = val;  return; }
-	if (addr < 0xFF00) { return; }
-
-	if (addr == IO_P1) { joypad_write(bus, val); return;}
-
-	if (addr == 0xFF46) {
-		uint16_t src = (uint16_t)val << 8;
-		for (int i = 0; i < 0xA0; i++) {
-			bus->oa_ram[i] = bus_read(bus, (uint16_t)(src + i));
-		}
-		return;
-	}
-
+	if (addr < 0xFF00) { 					return; }
 	if (addr < 0xFF80) { bus->io_ram[addr - 0xFF00] = val;  return; }
+
 	bus->hi_ram[addr - 0xFF80] = val;
 }
 
-void bus_init(Bus* bus, FILE* rom_b, FILE* rom) {
+bool bus_init(Bus* bus, FILE* rom_boot, FILE* rom_game) {
 
-	bus->c_rom = calloc((size_t) MAX_ROM_SIZE, sizeof *bus->c_rom);
-	if (!bus->c_rom) {
-		die("Error allocating memory for ROM.\n");
+	size_t ret = fread(bus->c_rom, 1, MAX_ROM_SIZE, rom_game);
+	if (ret == 0) {
+		fprintf(stderr, "[ERROR]: Reading the game-rom failed.\n");
+		return false;
 	}
 
-	size_t ret = fread(bus->c_rom, 1, MAX_ROM_SIZE, rom);
-	if (rom_b) {
-		ret = fread(bus->b_rom, 1, 256, rom_b);
-		bus->b_enabled = true;
+	if (rom_boot) {
+		ret = fread(bus->b_rom, 1, ROM_BOOT_SIZE, rom_boot);
+		if (ret == ROM_BOOT_SIZE) {
+			bus->b_enabled = true;
+		} else {
+			fprintf(stderr, "[INFO]: Reading the boot-rom failed. We skip it.\n");
+			bus->b_enabled = false;
+		}
 	} else {
 		bus->b_enabled = false;
 	}
-	(void) ret;
 
-	bus->input_state  = 0xFF;
+	bus->input_state = 0xFF;
 
-	bus_write(bus, IO_P1, 0x30);
+	bus_write(bus, REG_P1  , 0x30);
+	bus_write(bus, REG_LCDC, 0x91);
+	bus_write(bus, REG_BGP , 0xFC);
+	bus_write(bus, REG_OBP0, 0xFF);
+	bus_write(bus, REG_OBP1, 0xFF);
 
-	bus_write(bus, IO_LCDC, 0x91);
-	bus_write(bus, IO_BGP , 0xFC);
-	bus_write(bus, IO_OBP0, 0xFF);
-	bus_write(bus, IO_OBP1, 0xFF);
+	return true;
 }
 
